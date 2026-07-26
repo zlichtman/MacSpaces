@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>MacSpaces</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MacSpaces</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.3.16</string>
+	<key>CFBundleVersion</key>
+	<string>24</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MacSpaces uses AppleScript for quick actions, unread counts, and media metadata from Music, Spotify, or your active browser when system-wide media info is unavailable.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>MacSpaces captures audio only from apps you choose in the Audio Controls mixer so it can apply that app's saved volume or mute setting.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>MacSpaces reads connection changes for your already-paired Bluetooth devices to show brief notch live activities. It does not scan for or track nearby devices.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>MacSpaces shows today's events in the Calendar widget.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MacSpaces shows today's events in the Calendar widget.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>MacSpaces uses the camera for the notch Mirror tab so you can quickly check yourself before a call.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>MacSpaces reads your Desktop to list recent screenshots in the Screenshots widget.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>MacSpaces saves Voice Memo recordings to your Documents folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>MacSpaces reads your Downloads folder to list recent files in the Downloads widget.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT licensed open-source software.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MacSpaces records audio for the Voice Memo widget. Recordings stay in your Documents folder.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>MacSpaces shows and completes reminders in the Todos widget.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>MacSpaces shows and completes reminders in the Todos widget.</string>
+</dict>
+</plist>
