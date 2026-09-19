@@ -1,0 +1,31 @@
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Archives
+*.zip
+*.dmg
+Releases/
+
+# Signing material and local configuration
+*.cer
+*.p12
+*.provisionprofile
+*.mobileprovision
+.env
+.env.*
+!.env.example
