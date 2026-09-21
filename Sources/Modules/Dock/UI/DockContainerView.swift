@@ -359,6 +359,7 @@ struct WidgetTileView: View {
                     WidgetContextMenuItem(
                         title: kind.title,
                         systemImage: kind.systemImage,
+                        isEnabled: !store.widgets.contains(where: { $0.kind == kind }),
                         action: { store.add(kind) }
                     )
                 }
@@ -375,26 +376,7 @@ struct WidgetTileView: View {
                 isEnabled: store.widgets.last?.id != instance.id,
                 action: { store.move(instance, offset: 1) }
             ),
-            WidgetContextMenuItem(
-                title: "Duplicate",
-                systemImage: "plus.square.on.square",
-                action: { store.duplicate(instance) }
-            ),
-            WidgetContextMenuItem(
-                title: "Widget Look",
-                systemImage: "paintbrush",
-                children: WidgetVisualStyle.styles(for: instance.kind).map {
-                    style in
-                    WidgetContextMenuItem(
-                        title: style.title,
-                        systemImage: style.symbol,
-                        isSelected: instance.visualStyle == style,
-                        action: {
-                            store.setWidgetStyle(style, for: instance)
-                        }
-                    )
-                }
-            ),
+
         ]
         if instance.kind == .shortcuts {
             items.append(

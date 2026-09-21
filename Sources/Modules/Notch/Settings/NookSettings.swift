@@ -387,7 +387,7 @@ final class NookSettings: ObservableObject {
     }
 
     func widgetStyle(for kind: NookWidgetKind) -> WidgetVisualStyle {
-        activeProfile.widgetStyles?[kind.rawValue] ?? .studio
+        .studio
     }
 
     func setWidgetStyle(_ style: WidgetVisualStyle, for kind: NookWidgetKind) {
@@ -395,7 +395,7 @@ final class NookSettings: ObservableObject {
             return
         }
         var styles = profiles[index].widgetStyles ?? [:]
-        styles[kind.rawValue] = style
+        styles[kind.rawValue] = .studio
         profiles[index].widgetStyles = styles
     }
 

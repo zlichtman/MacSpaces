@@ -86,7 +86,10 @@ final class DockStore: ObservableObject {
     let calendar = AppServices.shared.calendar
     let crypto = AppServices.shared.crypto
 
-    var effectivePosition: DockPosition { position }
+    var effectivePosition: DockPosition {
+        DockPlacementPolicy.resolved(preferred: position, appleDock: AppleDockPlacement.shared.edge)
+    }
+    private var placementObservation: AnyCancellable?
 
     var shouldAutoHide: Bool { autoHide }
 
@@ -129,7 +132,7 @@ final class DockStore: ObservableObject {
         guard let index = widgets.firstIndex(where: { $0.id == instance.id }) else {
             return
         }
-        widgets[index].visualStyle = style
+        widgets[index].visualStyle = .studio
     }
 
     func setWidgetSize(
@@ -283,8 +286,10 @@ final class DockStore: ObservableObject {
     }
 
     private static var supportDirectory: URL {
+        let folder = Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces.WebsiteDemo"
+            ? "MacSpaces-WebsiteDemo" : "MacSpaces"
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MacSpaces", isDirectory: true)
+            .appendingPathComponent(folder, isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -349,6 +354,11 @@ final class DockStore: ObservableObject {
             activeProfileID = profiles[0].id
         }
 
+        placementObservation = AppleDockPlacement.shared.$edge
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+
         // Persist the one-time companion-mode migration immediately so future
         // launches never consult Apple Dock preferences again. Skipped when the
         // config was unreadable: the quarantined copy is the user's only record
@@ -367,7 +377,8 @@ final class DockStore: ObservableObject {
     }
 
     private static func load() -> LoadOutcome {
-        let sourceURL = FileManager.default.fileExists(atPath: configURL.path)
+        let isDemo = Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces.WebsiteDemo"
+        let sourceURL = isDemo || FileManager.default.fileExists(atPath: configURL.path)
             ? configURL
             : legacyConfigURL
         guard let data = try? Data(contentsOf: sourceURL) else { return .missing }

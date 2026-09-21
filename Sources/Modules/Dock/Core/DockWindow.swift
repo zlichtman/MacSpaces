@@ -16,7 +16,8 @@ final class DockWindow: NSPanel {
         isMovable = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        level = .floating
+        // Keep the edge utility above foreground app windows without activating it.
+        level = .statusBar
         // Keep the utility available on each Space without presenting it as a
         // window—or drawing over app previews—in Mission Control.
         collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary, .ignoresCycle]

@@ -17,7 +17,8 @@ final class DockController {
     private let store: DockStore
     private var managed: [ManagedWindow] = []
     private var cancellables: Set<AnyCancellable> = []
-    private var mouseMonitor: Any?
+    private var mouseMonitor: Timer?
+    private var isMenuTracking = false
     private var lastMouseEvaluation: CFTimeInterval = 0
     private var launchGraceUntil: CFTimeInterval = 0
 
@@ -59,6 +60,12 @@ final class DockController {
             .sink { [weak self] _ in self?.rebuildWindows() }
             .store(in: &cancellables)
 
+        for (name, tracking) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
+            NotificationCenter.default.publisher(for: name)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.isMenuTracking = tracking }
+                .store(in: &cancellables)
+        }
         reconcileMouseMonitor()
     }
 
@@ -241,10 +248,14 @@ final class DockController {
     private func reconcileMouseMonitor() {
         let needed = store.shouldAutoHide && store.isDockVisible && !store.widgets.isEmpty
         if needed, mouseMonitor == nil {
-            mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) {
-                [weak self] _ in
-                self?.mouseMovedEvent()
+            // Polling also works over our own windows, full-screen apps and
+            // apps that consume mouse-moved events, without Accessibility access.
+            let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.mouseMovedEvent() }
             }
+            timer.tolerance = 0.008
+            RunLoop.main.add(timer, forMode: .common)
+            mouseMonitor = timer
         } else if !needed {
             removeMouseMonitor()
         }
@@ -252,7 +263,7 @@ final class DockController {
 
     private func removeMouseMonitor() {
         if let mouseMonitor {
-            NSEvent.removeMonitor(mouseMonitor)
+            mouseMonitor.invalidate()
             self.mouseMonitor = nil
         }
     }
@@ -267,28 +278,22 @@ final class DockController {
     private func handleMouseMoved() {
         guard store.shouldAutoHide, store.isDockVisible, !store.widgets.isEmpty else { return }
         let mouse = NSEvent.mouseLocation
+        guard !store.isInteractiveReorderActive, !isMenuTracking else { return }
 
         for index in managed.indices {
             let entry = managed[index]
             let revealZone = entry.window.frame.insetBy(dx: -40, dy: -40)
 
             if entry.isHidden {
-                let screenFrame = entry.screen.frame
-                let nearEdge: Bool
-                switch store.effectivePosition {
-                case .bottom:
-                    nearEdge = screenFrame.contains(mouse) && mouse.y <= screenFrame.minY + 4
-                case .left:
-                    nearEdge = screenFrame.contains(mouse) && mouse.x <= screenFrame.minX + 4
-                case .right:
-                    nearEdge = screenFrame.contains(mouse) && mouse.x >= screenFrame.maxX - 4
-                }
+                let nearEdge = DockPlacementPolicy.isRevealPoint(
+                    mouse, on: entry.screen.frame, edge: store.effectivePosition
+                )
                 if nearEdge {
                     managed[index].hideWorkItem?.cancel()
                     managed[index].hideWorkItem = nil
                     setHidden(false, at: index)
                 }
-            } else if CACurrentMediaTime() < launchGraceUntil {
+            } else if CACurrentMediaTime() < launchGraceUntil || entry.window.isKeyWindow {
                 managed[index].hideWorkItem?.cancel()
                 managed[index].hideWorkItem = nil
             } else if !revealZone.contains(mouse) {
@@ -304,6 +309,11 @@ final class DockController {
         guard managed.indices.contains(index), managed[index].hideWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.managed.indices.contains(index) else { return }
+            guard !self.isMenuTracking, !self.store.isInteractiveReorderActive,
+                  !self.managed[index].window.isKeyWindow else {
+                self.managed[index].hideWorkItem = nil
+                return
+            }
             self.managed[index].hideWorkItem = nil
             let mouse = NSEvent.mouseLocation
             let revealZone = self.managed[index].window.frame.insetBy(dx: -44, dy: -44)

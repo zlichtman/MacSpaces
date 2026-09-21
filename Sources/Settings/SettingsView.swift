@@ -9,6 +9,7 @@ import UserNotifications
 enum SettingsDestination: String, CaseIterable, Identifiable {
     case notch
     case dock
+    case theme
     case permissions
     case about
 
@@ -18,6 +19,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         switch self {
         case .notch: return "OpenNotch"
         case .dock: return "OpenDock"
+        case .theme: return "Theme"
         case .permissions: return "Permissions"
         case .about: return "About"
         }
@@ -27,6 +29,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         switch self {
         case .notch: return "macbook.gen2"
         case .dock: return "dock.rectangle"
+        case .theme: return "paintpalette"
         case .permissions: return "hand.raised"
         case .about: return "info.circle"
         }
@@ -120,6 +123,7 @@ struct SettingsView: View {
         switch navigation.selection {
         case .notch: NookSettingsPane()
         case .dock: DockSettingsPane()
+        case .theme: ThemeSettingsPane()
         case .permissions: PermissionsSettingsPane()
         case .about: AboutSettingsPane()
         }
@@ -130,6 +134,7 @@ private struct DockSettingsPane: View {
     @ObservedObject private var app = AppSettings.shared
     @ObservedObject private var store = DockStore.shared
     @ObservedObject private var theme = ThemeStore.shared
+    @ObservedObject private var appleDock = AppleDockPlacement.shared
     @ObservedObject private var audioMixer = AppServices.shared.audioMixer
     @State private var showingAudioMixer = false
     @State private var showingResetConfirmation = false
@@ -153,6 +158,23 @@ private struct DockSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            SurfaceWidgetEditor(
+                surface: .dock,
+                items: store.widgets.map { WidgetEditorItem(id: $0.id.uuidString, kind: $0.kind.rawValue, title: $0.kind.title, symbol: $0.kind.systemImage) },
+                choices: WidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
+                toggle: { raw in
+                    guard let kind = WidgetKind(rawValue: raw) else { return }
+                    if store.widgets.contains(where: { $0.kind == kind }) {
+                        store.widgets.removeAll { $0.kind == kind }
+                    } else { store.add(kind) }
+                },
+                remove: { id in store.widgets.removeAll { $0.id.uuidString == id } },
+                reorder: { ids in
+                    let current = Dictionary(uniqueKeysWithValues: store.widgets.map { ($0.id.uuidString, $0) })
+                    store.setWidgetOrder(ids.compactMap { current[$0] })
+                }
+            )
 
             SettingsCard("Window previews", systemImage: "rectangle.on.rectangle") {
                 Toggle(
@@ -247,7 +269,6 @@ private struct DockSettingsPane: View {
                 }
             }
 
-            SurfaceThemePicker(surface: .dock)
 
             SettingsCard("Profile", systemImage: "rectangle.3.group") {
                 HStack {
@@ -291,41 +312,16 @@ private struct DockSettingsPane: View {
                 }
             }
 
-            SettingsCard("Widgets", systemImage: "square.grid.2x2") {
-                HStack {
-                    Text("\(store.widgets.count) selected")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Clear") {
-                        store.widgets = []
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(store.widgets.isEmpty)
-                }
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 150), spacing: 8)],
-                    spacing: 8
-                ) {
-                    ForEach(WidgetKind.allCases) { kind in
-                        dockWidgetCard(kind)
-                    }
-                }
-
-                Text("Select cards to add or remove widgets. Drag widgets directly in OpenDock to reorder them; glanceable widgets stack at their designed default size.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             SettingsCard("Placement", systemImage: "rectangle.bottomthird.inset.filled") {
-                Picker("Screen edge", selection: $store.position) {
-                    ForEach(DockPosition.allCases) { position in
+                Picker("Screen edge", selection: Binding(get: { store.effectivePosition }, set: { store.position = $0 })) {
+                    ForEach(DockPlacementPolicy.allowedEdges(appleDock: appleDock.edge)) { position in
                         Text(position.title).tag(position)
                     }
                 }
                 .pickerStyle(.segmented)
+
+                Text("Apple’s Dock is on the \(appleDock.edge.title.lowercased()). OpenDock keeps that edge free and moves automatically when it changes.")
+                    .font(.caption).foregroundStyle(.secondary)
 
                 SettingsSlider(
                     title: "Edge offset",
@@ -423,80 +419,6 @@ private struct DockSettingsPane: View {
         .help(granted ? "\(title) is allowed" : "Open \(title) settings")
     }
 
-    private func dockWidgetCard(_ kind: WidgetKind) -> some View {
-        let instance = store.widgets.first { $0.kind == kind }
-        let selected = instance != nil
-        return HStack(spacing: 0) {
-            Button {
-                if let instance {
-                    store.remove(instance)
-                } else {
-                    store.add(kind)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: kind.systemImage)
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 20)
-                    Text(kind.title)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(
-                            selected
-                                ? Color.black.opacity(0.72)
-                                : Color.primary.opacity(0.24)
-                        )
-                }
-                .padding(.leading, 10)
-                .padding(.trailing, selected ? 4 : 10)
-                .frame(maxWidth: .infinity, minHeight: 42)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if let instance {
-                Menu {
-                    Section("Look") {
-                        ForEach(WidgetVisualStyle.styles(for: kind)) { style in
-                            Button {
-                                store.setWidgetStyle(style, for: instance)
-                            } label: {
-                                Label(style.title, systemImage: style.symbol)
-                            }
-                        }
-                    }
-                    Button("Add another") {
-                        store.duplicate(instance)
-                    }
-                    Divider()
-                    Button("Remove \(kind.title)", role: .destructive) {
-                        store.remove(instance)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(width: 30, height: 42)
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-        }
-        .foregroundStyle(selected ? Color.black : Color.primary)
-        .background(
-            selected ? theme.dock.accent : Color.primary.opacity(0.045),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(
-                    selected ? Color.black.opacity(0.10) : Color.primary.opacity(0.06),
-                    lineWidth: 0.8
-                )
-        }
-    }
 }
 
 struct SurfaceThemePicker: View {
@@ -510,7 +432,7 @@ struct SurfaceThemePicker: View {
 
     var body: some View {
         SettingsCard("Theme", systemImage: "paintpalette") {
-            Text("Choose one palette for \(surface.title). Widget materials are selected on each widget.")
+            Text("Choose one palette for \(surface.title). The same modern widget style is used everywhere.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -563,8 +485,7 @@ struct SurfaceThemePicker: View {
                 .frame(height: 24)
             }
 
-            Divider()
-
+            DisclosureGroup("Fine-tune appearance") {
             SettingsSlider(
                 title: "Color intensity",
                 value: intensityBinding,
@@ -611,6 +532,8 @@ struct SurfaceThemePicker: View {
                     valueText: "\(Int(theme.dockCornerRadius)) pt"
                 )
             }
+            }
+
         }
     }
 
@@ -748,570 +671,18 @@ struct SurfaceThemePicker: View {
 
 private struct ThemeSettingsPane: View {
     @ObservedObject private var theme = ThemeStore.shared
+    @State private var surface: ThemeSurface = .notch
 
     var body: some View {
-        SettingsPage(
-            title: "Appearance",
-            subtitle: "See every change live, start from a complete look, or shape every surface yourself."
-        ) {
-            ThemePreview()
-
-            SettingsCard("Presets", systemImage: "wand.and.stars") {
-                Text("Four complete starting points. Each sets color and widget geometry; customization remains fully editable below.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 9) {
-                    ForEach(QuickLook.allCases) { look in
-                        Button {
-                            withAnimation(Design.spring()) { look.apply(to: theme) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 9) {
-                                HStack {
-                                    Image(systemName: look.symbol)
-                                        .foregroundStyle(look.accent)
-                                    Spacer(minLength: 0)
-                                    if look.isActive(in: theme) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(look.accent)
-                                    }
-                                }
-
-                                Text(look.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-
-                                HStack(spacing: 4) {
-                                    ForEach(Array(look.swatches.enumerated()), id: \.offset) { _, color in
-                                        Capsule()
-                                            .fill(color)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 5)
-                                    }
-                                }
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-                            .background(
-                                look.isActive(in: theme)
-                                    ? look.accent.opacity(0.17)
-                                    : Color.primary.opacity(0.045),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                    .strokeBorder(
-                                        look.isActive(in: theme)
-                                            ? look.accent.opacity(0.52)
-                                            : Color.primary.opacity(0.08)
-                                    )
-                            }
-                        }
-                        .buttonStyle(PremiumPressButtonStyle())
-                    }
-                }
+        SettingsPage(title: "Theme", subtitle: "One clean widget style. Colors for your whole workspace.") {
+            Picker("Surface", selection: $surface) {
+                Text("OpenNotch").tag(ThemeSurface.notch)
+                Text("OpenDock").tag(ThemeSurface.dock)
+            }.pickerStyle(.segmented)
+            SurfaceThemePicker(surface: surface)
+            SettingsCard("Motion", systemImage: "sparkles") {
+                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
             }
-
-            SettingsCard("Customization", systemImage: "slider.horizontal.3") {
-                customizationHeading(
-                    "Widget shape",
-                    detail: "Geometry changes without replacing your colors."
-                )
-
-                HStack(spacing: 8) {
-                    ForEach(WidgetVisualStyle.allCases) { style in
-                        Button {
-                            withAnimation(Design.spring()) {
-                                theme.widgetVisualStyle = style
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Image(systemName: style.symbol)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(theme.widgetVisualStyle == style ? theme.accent : .secondary)
-                                Text(style.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-                            .background {
-                                PremiumWidgetChrome(
-                                    tokens: theme.dock,
-                                    style: style,
-                                    isActive: theme.widgetVisualStyle == style
-                                )
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: style.chromeRadius, style: .continuous))
-                        }
-                        .buttonStyle(PremiumPressButtonStyle())
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Surface palettes",
-                    detail: "Keep Nook and Dock coordinated or mix any two palettes."
-                )
-
-                HStack(spacing: 10) {
-                    Menu {
-                        Section("MacSpaces") {
-                            ForEach(ThemePreset.macSpacesPresets) { preset in
-                                Button(preset.title) {
-                                    theme.applyCoordinatedPreset(preset)
-                                }
-                            }
-                        }
-                        Section("Terminal classics") {
-                            ForEach(ThemePreset.terminalPresets) { preset in
-                                Button(preset.title) {
-                                    theme.applyCoordinatedPreset(preset)
-                                }
-                            }
-                        }
-                    } label: {
-                        Label("Apply to both", systemImage: "link")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Picker("Nook", selection: $theme.notchPreset) {
-                        ForEach(ThemePreset.allCases) { Text($0.title).tag($0) }
-                    }
-
-                    Picker("Dock", selection: $theme.dockPreset) {
-                        ForEach(ThemePreset.allCases) { Text($0.title).tag($0) }
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Color",
-                    detail: "Choose a quick accent or enter exact colors for each surface."
-                )
-
-                HStack(spacing: 17) {
-                    ForEach(AccentChoice.allCases) { choice in
-                        Button {
-                            theme.accentChoice = choice
-                        } label: {
-                            Circle()
-                                .fill(choice == .custom ? (Color(themeHex: theme.customAccentHex) ?? .white) : choice.color)
-                                .frame(width: 22, height: 22)
-                                .overlay {
-                                    if theme.accentChoice == choice {
-                                        Circle().strokeBorder(.primary, lineWidth: 2)
-                                            .padding(-4)
-                                    }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .help(choice.title)
-                    }
-                }
-
-                HStack(alignment: .top, spacing: 12) {
-                    ExactColorField(
-                        "Accent",
-                        color: accentColor,
-                        hex: $theme.customAccentHex
-                    ) {
-                        theme.accentChoice = .custom
-                    }
-                    ExactColorField(
-                        "Nook",
-                        color: nookColor,
-                        hex: $theme.customNotchHex
-                    ) {
-                        theme.notchPreset = .custom
-                    }
-                    ExactColorField(
-                        "Dock",
-                        color: dockColor,
-                        hex: $theme.customDockHex
-                    ) {
-                        theme.dockPreset = .custom
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Finish",
-                    detail: "Control depth, edges, density, and motion."
-                )
-
-                VStack(spacing: 10) {
-                    SettingsSlider(
-                        title: "Color intensity",
-                        value: $theme.themeIntensity,
-                        range: 0...1,
-                        valueText: "\(Int(theme.themeIntensity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Tile definition",
-                        value: $theme.tileContrast,
-                        range: 0...1,
-                        valueText: "\(Int(theme.tileContrast * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Ambient glow",
-                        value: $theme.glowStrength,
-                        range: 0...1,
-                        valueText: "\(Int(theme.glowStrength * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook edge",
-                        value: $theme.notchEdgeWidth,
-                        range: 0...4,
-                        valueText: String(format: "%.1f pt", theme.notchEdgeWidth)
-                    )
-                    SettingsSlider(
-                        title: "Edge contrast",
-                        value: $theme.notchEdgeStrength,
-                        range: 0...1,
-                        valueText: "\(Int(theme.notchEdgeStrength * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook opacity",
-                        value: $theme.notchOpacity,
-                        range: 0.84...1,
-                        valueText: "\(Int(theme.notchOpacity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Dock opacity",
-                        value: $theme.dockOpacity,
-                        range: 0.72...1,
-                        valueText: "\(Int(theme.dockOpacity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook corners",
-                        value: $theme.notchCornerRadius,
-                        range: 14...34,
-                        valueText: "\(Int(theme.notchCornerRadius)) pt"
-                    )
-                    SettingsSlider(
-                        title: "Dock corners",
-                        value: $theme.dockCornerRadius,
-                        range: 14...34,
-                        valueText: "\(Int(theme.dockCornerRadius)) pt"
-                    )
-
-                    Divider()
-
-                    Toggle("Gradient surfaces", isOn: $theme.gradientSurfaces)
-                    Toggle("Compact controls", isOn: $theme.compactControls)
-                    Toggle("Reduce interface motion", isOn: $theme.reduceMotionPreference)
-                        .disabled(theme.systemReduceMotion)
-                    if theme.systemReduceMotion {
-                        Text("Already on because Reduce Motion is enabled in System Settings › Accessibility › Display.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Divider()
-
-                HStack {
-                    Text("Changes apply to the Nook and Dock immediately.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Restore Defaults") {
-                        theme.reset()
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private enum QuickLook: CaseIterable, Identifiable {
-        case midnightStudio, tidalGlass, tokyoTerminal, emberSoft
-
-        nonisolated var id: Self { self }
-
-        var title: String {
-            switch self {
-            case .midnightStudio: return "Midnight Studio"
-            case .tidalGlass: return "Tidal Glass"
-            case .tokyoTerminal: return "Tokyo Terminal"
-            case .emberSoft: return "Ember Soft"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .midnightStudio: return "moon.stars.fill"
-            case .tidalGlass: return "water.waves"
-            case .tokyoTerminal: return "terminal.fill"
-            case .emberSoft: return "sparkles"
-            }
-        }
-
-        var accent: Color {
-            switch self {
-            case .midnightStudio: return AccentChoice.blue.color
-            case .tidalGlass: return AccentChoice.cyan.color
-            case .tokyoTerminal: return Color(themeHex: "#7AA2F7") ?? AccentChoice.blue.color
-            case .emberSoft: return AccentChoice.orange.color
-            }
-        }
-
-        var swatches: [Color] {
-            switch self {
-            case .midnightStudio:
-                return [Color(themeHex: "#020714") ?? .black, Color(themeHex: "#0A2952") ?? .blue, accent]
-            case .tidalGlass:
-                return [Color(themeHex: "#021D2A") ?? .black, Color(themeHex: "#006B8F") ?? .cyan, accent]
-            case .tokyoTerminal:
-                return [Color(themeHex: "#1A1B26") ?? .black, Color(themeHex: "#24283B") ?? .gray, accent]
-            case .emberSoft:
-                return [Color(themeHex: "#240606") ?? .black, Color(themeHex: "#B82106") ?? .orange, accent]
-            }
-        }
-
-        func apply(to theme: ThemeStore) {
-            switch self {
-            case .midnightStudio:
-                theme.applyCoordinatedPreset(.midnight)
-                theme.widgetVisualStyle = .studio
-                theme.themeIntensity = 0.82
-                theme.tileContrast = 0.72
-                theme.glowStrength = 0.24
-                theme.gradientSurfaces = true
-            case .tidalGlass:
-                theme.applyCoordinatedPreset(.ocean)
-                theme.widgetVisualStyle = .glass
-                theme.themeIntensity = 0.72
-                theme.tileContrast = 0.56
-                theme.glowStrength = 0.34
-                theme.gradientSurfaces = true
-            case .tokyoTerminal:
-                theme.applyCoordinatedPreset(.tokyoNight)
-                theme.widgetVisualStyle = .terminal
-                theme.themeIntensity = 0.88
-                theme.tileContrast = 0.84
-                theme.glowStrength = 0.12
-                theme.gradientSurfaces = false
-            case .emberSoft:
-                theme.applyCoordinatedPreset(.sunset)
-                theme.widgetVisualStyle = .soft
-                theme.themeIntensity = 0.86
-                theme.tileContrast = 0.64
-                theme.glowStrength = 0.31
-                theme.gradientSurfaces = true
-            }
-        }
-
-        func isActive(in theme: ThemeStore) -> Bool {
-            switch self {
-            case .midnightStudio: return theme.notchPreset == .midnight && theme.dockPreset == .midnight && theme.widgetVisualStyle == .studio
-            case .tidalGlass: return theme.notchPreset == .ocean && theme.dockPreset == .ocean && theme.widgetVisualStyle == .glass
-            case .tokyoTerminal: return theme.notchPreset == .tokyoNight && theme.dockPreset == .tokyoNight && theme.widgetVisualStyle == .terminal
-            case .emberSoft: return theme.notchPreset == .sunset && theme.dockPreset == .sunset && theme.widgetVisualStyle == .soft
-            }
-        }
-    }
-
-    private var accentColor: Binding<Color> {
-        customColor(hex: theme.customAccentHex) {
-            theme.customAccentHex = $0
-            theme.accentChoice = .custom
-        }
-    }
-
-    private var nookColor: Binding<Color> {
-        customColor(hex: theme.customNotchHex) {
-            theme.customNotchHex = $0
-            theme.notchPreset = .custom
-        }
-    }
-
-    private var dockColor: Binding<Color> {
-        customColor(hex: theme.customDockHex) {
-            theme.customDockHex = $0
-            theme.dockPreset = .custom
-        }
-    }
-
-    private func customColor(hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
-        Binding(
-            get: { Color(themeHex: hex) ?? .black },
-            set: { set(NSColor($0).themeHexString) }
-        )
-    }
-
-    private func customizationHeading(_ title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct ExactColorField: View {
-    private let title: String
-    @Binding private var color: Color
-    @Binding private var hex: String
-    private let onCustom: () -> Void
-
-    @State private var draft: String
-
-    init(
-        _ title: String,
-        color: Binding<Color>,
-        hex: Binding<String>,
-        onCustom: @escaping () -> Void
-    ) {
-        self.title = title
-        self._color = color
-        self._hex = hex
-        self.onCustom = onCustom
-        self._draft = State(initialValue: hex.wrappedValue)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ColorPicker(title, selection: $color, supportsOpacity: false)
-                .font(.system(size: 11, weight: .medium))
-            TextField("#000000", text: $draft)
-                .font(.system(size: 10, design: .monospaced))
-                .textFieldStyle(.roundedBorder)
-                .onChange(of: draft) { newValue in
-                    // Only a user edit should switch the surface to its custom
-                    // color; programmatic hex changes arrive with draft already
-                    // synced below.
-                    guard newValue != hex else { return }
-                    hex = newValue
-                    onCustom()
-                }
-                .onChange(of: hex) { newValue in
-                    if draft != newValue { draft = newValue }
-                }
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity)
-        .background(
-            Color.primary.opacity(0.04),
-            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-        )
-    }
-}
-
-private struct ThemePreview: View {
-    @ObservedObject private var theme = ThemeStore.shared
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.08, green: 0.10, blue: 0.16),
-                    Color(red: 0.12, green: 0.18, blue: 0.25),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            VStack(spacing: 12) {
-                previewLabel("NOOK", value: theme.notchPreset.title)
-
-                HStack(spacing: 7) {
-                    previewTile("music.note", tokens: theme.notch, width: 104)
-                    previewTile("timer", tokens: theme.notch, width: 58)
-                    previewTile("calendar", tokens: theme.notch, width: 74)
-                }
-                .padding(9)
-                .frame(maxWidth: .infinity)
-                .background(
-                    theme.notch.surface,
-                    in: RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                )
-                .background(
-                    theme.notch.surfaceSecondary,
-                    in: RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                        .strokeBorder(theme.notch.border, lineWidth: max(1, theme.notchEdgeWidth))
-                }
-
-                HStack(spacing: 10) {
-                    previewLabel("DOCK", value: theme.dockPreset.title)
-                    Spacer()
-                    HStack(spacing: 6) {
-                        previewTile("clock.fill", tokens: theme.dock, width: 34)
-                        previewTile("bolt.fill", tokens: theme.dock, width: 34)
-                        previewTile("battery.100percent", tokens: theme.dock, width: 34)
-                    }
-                    .padding(6)
-                    .background(
-                        theme.dock.surface,
-                        in: RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                    )
-                    .background(
-                        theme.dock.surfaceSecondary,
-                        in: RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                            .strokeBorder(theme.dock.border)
-                    }
-                }
-            }
-            .padding(14)
-        }
-        .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12))
-        }
-    }
-
-    private func previewLabel(_ title: String, value: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 8, weight: .bold))
-                .tracking(0.8)
-            Text(value)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.white)
-    }
-
-    private func previewTile(
-        _ symbol: String,
-        tokens: ThemeTokens,
-        width: CGFloat
-    ) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(tokens.accent)
-            .frame(width: width, height: 34)
-            .background {
-                PremiumWidgetChrome(tokens: tokens, style: theme.widgetVisualStyle, isActive: false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: previewRadius, style: .continuous))
-    }
-
-    private var previewRadius: CGFloat {
-        switch theme.widgetVisualStyle {
-        case .studio: return 10
-        case .glass: return 12
-        case .terminal: return 5
-        case .soft: return 16
-        case .signal: return 8
-        case .orbit: return 17
-        case .mono: return 6
-        case .frame: return 7
         }
     }
 }

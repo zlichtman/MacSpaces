@@ -10,18 +10,20 @@ enum WebsiteDemoCapture {
         precondition(Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces.WebsiteDemo")
         let environment = ProcessInfo.processInfo.environment
         let output = URL(fileURLWithPath: environment["MACSPACES_DEMO_OUTPUT"] ?? "/private/tmp/macspaces-gallery-native")
-        let artworkPath = environment["MACSPACES_DEMO_ARTWORK"] ?? "/private/tmp/macspaces-pillow-lips.jpg"
+        let artworkPath = environment["MACSPACES_DEMO_ARTWORK"] ?? "/private/tmp/macspaces-phantogram.jpg"
         try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        InteractionRegressionChecks.run()
+        AppleDockPlacement.shared.setPreviewEdge(.left)
         let theme = ThemeStore.shared
         theme.reset()
         let services = AppServices.shared
         var track = NowPlayingInfo()
-        track.title = "I Melt With You"
-        track.artist = "Modern English"
-        track.album = "Pillow Lips"
+        track.title = "Mouthful of Diamonds"
+        track.artist = "Phantogram"
+        track.album = "Eyelid Movies"
         track.isPlaying = true
-        track.duration = 235.933
-        track.elapsed = 96
+        track.duration = 253.427
+        track.elapsed = 74
         track.artwork = NSImage(contentsOfFile: artworkPath)!
         services.nowPlaying.setPreviewInfo(track)
         let settings = NookSettings.shared
@@ -70,7 +72,15 @@ enum WebsiteDemoCapture {
         }
         func palette(_ name: String) {
             theme.reset()
-            if name == "everforest" {
+            if name == "gold" {
+                theme.customNotchHex = "#211A11"
+                theme.customDockHex = "#211A11"
+                theme.customAccentHex = "#D6AF63"
+                theme.accentChoice = .custom
+                theme.applyCoordinatedPreset(.custom)
+                theme.notchThemeIntensity = 0.55
+                theme.dockThemeIntensity = 0.55
+            } else if name == "everforest" {
                 theme.customNotchHex = "#2D353B"
                 theme.customDockHex = "#2D353B"
                 theme.customAccentHex = "#A7C080"
@@ -80,21 +90,21 @@ enum WebsiteDemoCapture {
                 theme.applyCoordinatedPreset(name == "sunset" ? .sunset : .midnight)
             }
         }
-        // The overview owns its combined compositions; none appear on the detail slides.
-        for name in ["midnight", "everforest", "sunset"] {
-            palette(name)
-            profile([.media, .timer, .clock])
-            dockProfile([.nowPlaying, .pomodoro, .progress])
-            let nook = model(); nook.state = .expanded
-            let size = dockSize()
-            render(VStack(spacing: 30) {
-                NotchContainerView(viewModel: nook).frame(width: 700, height: 254)
-                DockContainerView(store: dock).frame(width: size.width, height: size.height)
-            }.padding(.vertical, 26).frame(width: 740, height: 460), size: CGSize(width: 740, height: 460), to: output.appendingPathComponent("overview-\(name).png"))
-        }
-        palette("midnight")
-        for (name, widgets) in [("music", [NookWidgetKind.media, .timer, .clock]), ("focus", [.timer, .clock])] {
-            profile(widgets)
+        // Device overview: actual native surfaces placed at their desktop edges.
+        palette("gold")
+        profile([.media, .clock])
+        dockProfile([.pomodoro, .progress, .quickActions])
+        let overview = model(hardware: true); overview.state = .expanded
+        let overviewDock = dockSize()
+        render(ZStack(alignment: .top) {
+            NotchContainerView(viewModel: overview).overlay(alignment: .top) {
+                UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
+            }.frame(width: 700, height: 254)
+            VStack { Spacer(); DockContainerView(store: dock).frame(width: overviewDock.width, height: overviewDock.height).padding(.bottom, 24) }
+        }.frame(width: 1000, height: 625), size: CGSize(width: 1000, height: 625), to: output.appendingPathComponent("desktop-gold.png"))
+        palette("gold")
+        for (name, widgets) in [("music", [NookWidgetKind.media, .clock]), ("focus", [.clock, .timer])] {
+            profile(widgets, style: name == "music" ? .frame : .terminal)
             let nook = model(); nook.state = .expanded
             render(NotchContainerView(viewModel: nook).frame(width: 580, height: 260).padding(.top, 28).frame(width: 620, height: 324), size: CGSize(width: 620, height: 324), to: output.appendingPathComponent("notch-\(name).png"))
         }
@@ -103,10 +113,15 @@ enum WebsiteDemoCapture {
         settings.fitWidthToProfile = false
         let tray = model(); tray.state = .expanded; tray.selectedTab = .tray
         render(NotchContainerView(viewModel: tray).frame(width: 580, height: 260).padding(.top, 28).frame(width: 620, height: 324), size: CGSize(width: 620, height: 324), to: output.appendingPathComponent("notch-tray.png"))
-        for (name, widgets) in [("listen", [WidgetKind.nowPlaying, .pomodoro]), ("plan", [.clock, .progress, .quickActions]), ("focus", [.nowPlaying, .clock, .pomodoro])] {
+        for (name, widgets) in [("listen", [WidgetKind.nowPlaying, .quickActions]), ("plan", [.progress, .clock]), ("focus", [.pomodoro, .nowPlaying, .clock])] {
+            palette(name == "listen" ? "gold" : name == "plan" ? "everforest" : "midnight")
             dockProfile(widgets)
             let size = dockSize()
             render(DockContainerView(store: dock).frame(width: size.width, height: size.height).frame(width: size.width + 48, height: 184), size: CGSize(width: size.width + 48, height: 184), to: output.appendingPathComponent("dock-\(name).png"))
+        }
+        for destination in [SettingsDestination.notch, .dock, .theme] {
+            SettingsNavigationModel.shared.selection = destination
+            render(SettingsView().frame(width: 980, height: 760), size: CGSize(width: 980, height: 760), to: output.appendingPathComponent("settings-\(destination.rawValue).png"))
         }
         // Regression captures: a physical camera overlay exposes controls hidden behind it.
         settings.fitWidthToProfile = true

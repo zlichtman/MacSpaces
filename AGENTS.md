@@ -173,6 +173,6 @@ views. It also checks empty, single-widget, and paired-widget profiles against
 the physical notch, plus the below-notch fallback on constrained displays.
 Build Debug with `PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.WebsiteDemo`
 and launch with `MACSPACES_WEBSITE_DEMO=1`. The separate bundle identifier is
-required to isolate demo settings. Supply `MACSPACES_DEMO_ARTWORK` with the path
-to the Pillow Lips album cover and optionally `MACSPACES_DEMO_OUTPUT` for output.
+required to isolate demo preferences and Dock storage. Supply `MACSPACES_DEMO_ARTWORK` with the path
+to the Eyelid Movies album cover and optionally `MACSPACES_DEMO_OUTPUT` for output.
 The Everforest demo uses the app's custom palette support (#2D353B / #A7C080).

@@ -41,7 +41,7 @@ enum ThemePreset: String, Codable, CaseIterable, Identifiable {
         case .sunset: return "Ember"
         case .acid: return "Acid"
         case .cobalt: return "Cobalt"
-        case .forest: return "Forest"
+        case .forest: return "Everforest"
         case .dracula: return "Dracula"
         case .nord: return "Nord"
         case .solarizedDark: return "Solarized Dark"
@@ -125,7 +125,7 @@ enum ThemePreset: String, Codable, CaseIterable, Identifiable {
         case .sunset: hexes = ["#240606", "#B82106", "#FF7A1F"]
         case .acid: hexes = ["#091105", "#557A08", "#A3F52E"]
         case .cobalt: hexes = ["#061124", "#174B91", "#18C5F1"]
-        case .forest: hexes = ["#06140F", "#176B4F", "#1AE8A6"]
+        case .forest: hexes = ["#2D353B", "#475258", "#A7C080"]
         case .dracula: hexes = ["#282A36", "#6272A4", "#BD93F9"]
         case .nord: hexes = ["#2E3440", "#5E81AC", "#88C0D0"]
         case .solarizedDark: hexes = ["#002B36", "#586E75", "#2AA198"]
@@ -182,11 +182,18 @@ enum AccentChoice: String, Codable, CaseIterable, Identifiable {
 enum WidgetVisualStyle: String, Codable, CaseIterable, Identifiable {
     case studio, glass, terminal, soft, signal, orbit, mono, frame
 
+    static var allCases: [WidgetVisualStyle] { [.studio] }
+
+    init(from decoder: Decoder) throws {
+        _ = try decoder.singleValueContainer().decode(String.self)
+        self = .studio
+    }
+
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .studio: return "Classic"
+        case .studio: return "Modern"
         case .glass: return "Glass"
         case .terminal: return "Terminal"
         case .soft: return "Soft"
@@ -237,27 +244,9 @@ enum WidgetVisualStyle: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    static func styles(for kind: NookWidgetKind) -> [WidgetVisualStyle] {
-        switch kind {
-        case .media:
-            return [.studio, .glass, .terminal, .signal, .mono, .frame]
-        case .clock, .timer:
-            return [.studio, .glass, .terminal, .orbit, .mono, .frame]
-        default:
-            return [.studio, .glass, .terminal, .soft, .mono, .frame]
-        }
-    }
+    static func styles(for kind: NookWidgetKind) -> [WidgetVisualStyle] { [.studio] }
+    static func styles(for kind: WidgetKind) -> [WidgetVisualStyle] { [.studio] }
 
-    static func styles(for kind: WidgetKind) -> [WidgetVisualStyle] {
-        switch kind {
-        case .nowPlaying, .audio:
-            return [.studio, .glass, .terminal, .signal, .mono, .frame]
-        case .clock, .pomodoro:
-            return [.studio, .glass, .terminal, .orbit, .mono, .frame]
-        default:
-            return [.studio, .glass, .terminal, .soft, .mono, .frame]
-        }
-    }
 }
 
 struct ThemeTokens {
@@ -490,7 +479,7 @@ final class ThemeStore: ObservableObject {
         gradientSurfaces = defaults.bool(forKey: Keys.gradientSurfaces)
         compactControls = defaults.bool(forKey: Keys.compactControls)
         reduceMotionPreference = defaults.bool(forKey: Keys.reduceMotion)
-        widgetVisualStyle = WidgetVisualStyle(rawValue: defaults.string(forKey: Keys.widgetVisualStyle) ?? "") ?? .studio
+        widgetVisualStyle = .studio
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
@@ -658,9 +647,9 @@ final class ThemeStore: ObservableObject {
             palette = AccentChoice.cyan.color
             scheme = .dark
         case .forest:
-            base = Color(red: 0.012, green: 0.07, blue: 0.045)
-            colorWash = Color(red: 0.025, green: 0.38, blue: 0.20)
-            palette = AccentChoice.mint.color
+            base = Color(themeHex: "#2D353B") ?? .black
+            colorWash = Color(themeHex: "#475258") ?? .gray
+            palette = Color(themeHex: "#A7C080") ?? AccentChoice.mint.color
             scheme = .dark
         case .dracula:
             base = Color(themeHex: "#282A36") ?? .black

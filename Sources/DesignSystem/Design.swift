@@ -36,68 +36,15 @@ struct PremiumWidgetChrome: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        ZStack {
-            switch style {
-            case .studio:
-                shape.fill(tokens.tileGradient)
-                shape.fill(LinearGradient(colors: [Color.white.opacity(0.055), .clear], startPoint: .top, endPoint: .center))
-            case .glass:
-                shape.fill(tokens.surface.opacity(0.54))
-                shape.fill(LinearGradient(colors: [Color.white.opacity(0.13), tokens.tile.opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            case .terminal:
-                shape.fill(tokens.surfaceSecondary.opacity(0.70))
-                shape.fill(tokens.tile.opacity(0.34))
-            case .soft:
-                shape.fill(tokens.tileGradient)
-                Circle()
-                    .fill(tokens.accent.opacity(0.12))
-                    .frame(width: 100, height: 100)
-                    .blur(radius: 24)
-                    .offset(x: 44, y: -34)
-            case .signal:
-                shape.fill(tokens.surface.opacity(0.92))
-                shape.fill(
-                    LinearGradient(
-                        colors: [tokens.accent.opacity(0.18), tokens.tile.opacity(0.45), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+        shape
+            .fill(tokens.tile.opacity(0.55))
+            .overlay {
+                shape.strokeBorder(
+                    isActive ? tokens.accent.opacity(0.45) : Color.primary.opacity(0.07),
+                    lineWidth: 1
                 )
-            case .orbit:
-                shape.fill(tokens.tileGradient)
-                shape.fill(
-                    RadialGradient(
-                        colors: [tokens.accent.opacity(0.13), .clear],
-                        center: .center,
-                        startRadius: 2,
-                        endRadius: 86
-                    )
-                )
-            case .mono:
-                shape.fill(
-                    tokens.colorScheme == .dark
-                        ? Color.black.opacity(0.78)
-                        : Color.white.opacity(0.92)
-                )
-                Rectangle()
-                    .fill(tokens.accent)
-                    .frame(width: 5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .clipShape(shape)
-            case .frame:
-                shape.fill(tokens.surface.opacity(0.34))
-                shape.strokeBorder(tokens.accent.opacity(0.22), lineWidth: 4)
-                    .padding(5)
             }
-        }
-        .overlay {
-            shape.strokeBorder(
-                style == .terminal || style == .signal || style == .mono || style == .frame
-                    ? tokens.accent.opacity(isActive ? 0.64 : 0.34)
-                    : tokens.border.opacity(isActive ? 1 : 0.72),
-                lineWidth: (style == .terminal || style == .signal || style == .mono) ? 1 : 0.8
-            )
-        }
+            .clipShape(shape)
     }
 }
 

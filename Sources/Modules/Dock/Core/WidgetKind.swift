@@ -224,7 +224,7 @@ struct WidgetInstance: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.kind = kind
-        self.visualStyle = visualStyle
+        self.visualStyle = .studio
         self.sizeMode = sizeMode
     }
 

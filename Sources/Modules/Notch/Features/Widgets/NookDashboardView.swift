@@ -300,19 +300,16 @@ private struct NookDashboardTile: View {
                 }
             ),
             WidgetContextMenuItem(
-                title: "Widget Look",
-                systemImage: "paintbrush",
-                children: WidgetVisualStyle.styles(for: kind).map { style in
-                    WidgetContextMenuItem(
-                        title: style.title,
-                        systemImage: style.symbol,
-                        isSelected: visualStyle == style,
-                        action: {
-                            viewModel.settings.setWidgetStyle(style, for: kind)
-                        }
-                    )
-                }
+                title: "Move Earlier", systemImage: "arrow.left",
+                isEnabled: viewModel.settings.widgets.first != kind,
+                action: { viewModel.settings.moveWidget(kind, offset: -1) }
             ),
+            WidgetContextMenuItem(
+                title: "Move Later", systemImage: "arrow.right",
+                isEnabled: viewModel.settings.widgets.last != kind,
+                action: { viewModel.settings.moveWidget(kind, offset: 1) }
+            ),
+
         ]
         if kind == .shortcuts {
             items.append(
