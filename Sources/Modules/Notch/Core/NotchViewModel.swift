@@ -59,26 +59,39 @@ final class NotchViewModel: ObservableObject {
     /// width setting as a ceiling for larger, horizontally scrollable layouts.
     var expandedSize: CGSize {
         let maximumWidth = max(420, availableWidth - 48)
+        // Each shoulder must fit the complete tab or action group without
+        // placing a control behind the physical camera cutout.
+        let headerMinimum = geometry.isHardwareNotch ? geometry.width + 440 : 480
         let showsTeleprompter = settings.showTeleprompterBar && selectedTab == .nook
         if settings.widgets.isEmpty {
             return CGSize(
-                width: min(maximumWidth, max(440, geometry.width + 220)),
-                height: showsTeleprompter ? 216 : 170
+                width: min(maximumWidth, headerMinimum),
+                height: (showsTeleprompter ? 216 : 170) + headerExtraHeight(for: min(maximumWidth, headerMinimum))
             )
         }
-        let userMaximum = min(max(CGFloat(settings.expandedWidth), 480), maximumWidth)
+        let userMaximum = min(max(CGFloat(settings.expandedWidth), headerMinimum), maximumWidth)
         let layoutItems = settings.widgets.nookLayoutItems()
         let widgetWidths = layoutItems.reduce(CGFloat.zero) {
             $0 + $1.width
         }
         let spacing = CGFloat(max(0, layoutItems.count - 1)) * 10
-        let fittedWidth = max(480, widgetWidths + spacing + 40)
+        let fittedWidth = max(headerMinimum, widgetWidths + spacing + 40)
         let width = settings.fitWidthToProfile
             ? min(userMaximum, fittedWidth)
             : userMaximum
         let baseHeight = min(max(CGFloat(settings.expandedHeight), 210), 420)
-        let height = baseHeight + (showsTeleprompter ? 46 : 0)
+        let height = baseHeight + (showsTeleprompter ? 46 : 0) + headerExtraHeight(for: width)
         return CGSize(width: width, height: height)
+    }
+
+    /// A constrained display uses a row below the cutout instead of hiding controls.
+    var expandedHeaderTopInset: CGFloat {
+        (geometry.isHardwareNotch ? 9 : 8) + headerExtraHeight(for: expandedSize.width)
+    }
+
+    private func headerExtraHeight(for width: CGFloat) -> CGFloat {
+        guard geometry.isHardwareNotch, width < geometry.width + 440 else { return 0 }
+        return max(0, geometry.height + 8 - 9)
     }
 
     private var collapseWorkItem: DispatchWorkItem?

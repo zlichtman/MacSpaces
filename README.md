@@ -151,8 +151,13 @@ For a notarized local release, configure a `notarytool` keychain profile named
 `MacSpaces`, then run:
 
 ```bash
-MACSPACES_NOTARIZE=1 make package
+make release
 ```
+
+The release command requires a Developer ID Application certificate, submits
+both the app and DMG to Apple, staples their tickets, and checks Gatekeeper
+acceptance before replacing the release DMG. `make package` alone is for local
+use and does not notarize the download.
 
 No certificates, provisioning profiles, or notary credentials are stored in
 this repository. `Demos/` holds the screenshots used on the website.

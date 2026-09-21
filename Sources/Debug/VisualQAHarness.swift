@@ -7,6 +7,7 @@ import AppKit
 @MainActor
 enum VisualQAHarness {
     static func captureIfRequested() -> Bool {
+        if WebsiteDemoCapture.captureIfRequested() { return true }
         guard ProcessInfo.processInfo.environment["MACSPACES_VISUAL_QA"] == "1" else {
             return false
         }

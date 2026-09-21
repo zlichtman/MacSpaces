@@ -124,8 +124,10 @@ actions). Usage strings live in `project.yml` under `info.properties`.
      `MACSPACES_NOTARY_PROFILE` (default `MacSpaces`), then staples it;
   4. builds `MacSpaces.dmg` (UDZO, `/Applications` symlink), signs the image,
      notarizes and staples it too when enabled;
-  5. mounts the image and verifies the signature and both architectures before
+  5. mounts the image and verifies the signature and both architectures, plus
+     stapling and Gatekeeper acceptance when notarization is enabled, before
      moving it to `Releases/MacSpaces.dmg` (ignored by git).
+- `make release` enables notarization; `make package` remains a local build.
 - A public release must be notarized: Gatekeeper rejects a Developer ID
   signature without a ticket (`spctl -a -t open --context
   context:primary-signature MacSpaces.dmg` must say `accepted`). Store the
@@ -163,3 +165,14 @@ xcodebuild -project MacSpaces.xcodeproj -scheme MacSpaces -configuration Debug \
 
 Keep generated projects, build products, local app data, signing material, and
 packaged releases out of commits (`.gitignore` already covers them).
+
+## Website demo captures
+
+`WebsiteDemoCapture` renders distinct overview, Nook, and Dock scenes from native
+views. It also checks empty, single-widget, and paired-widget profiles against
+the physical notch, plus the below-notch fallback on constrained displays.
+Build Debug with `PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.WebsiteDemo`
+and launch with `MACSPACES_WEBSITE_DEMO=1`. The separate bundle identifier is
+required to isolate demo settings. Supply `MACSPACES_DEMO_ARTWORK` with the path
+to the Pillow Lips album cover and optionally `MACSPACES_DEMO_OUTPUT` for output.
+The Everforest demo uses the app's custom palette support (#2D353B / #A7C080).

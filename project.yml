@@ -19,8 +19,8 @@ targets:
       properties:
         CFBundleName: MacSpaces
         CFBundleDisplayName: MacSpaces
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0.1"
+        CFBundleVersion: "2"
         LSMinimumSystemVersion: "13.0"
         LSUIElement: true
         LSMultipleInstancesProhibited: true

@@ -263,7 +263,7 @@ struct NotchContainerView: View {
         // Notched hardware reports a menu-bar-height safe top area. Header
         // controls are placed in the usable shoulders around it instead of
         // leaving a full empty band above Nook/Tray.
-        let topInset: CGFloat = viewModel.geometry.isHardwareNotch ? 9 : 8
+        let topInset = viewModel.expandedHeaderTopInset
         let horizontalInset: CGFloat = 20
         let bottomInset: CGFloat = 18
 
