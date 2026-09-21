@@ -1,46 +1,66 @@
 import SwiftUI
 
-struct NookSettingsPane: View {
+struct GeneralSettingsPane: View {
     @ObservedObject private var app = AppSettings.shared
     @ObservedObject private var settings = NookSettings.shared
     @ObservedObject private var theme = ThemeStore.shared
     @State private var showingResetConfirmation = false
 
     var body: some View {
-        SettingsPage(
-            title: "Nook",
-            subtitle: "Choose your widgets, then make the Nook fit your day."
-        ) {
-            SettingsCard("Nook", systemImage: "power") {
-                HStack {
-                    Toggle("Enable Nook", isOn: $app.notchEnabled)
-                    Spacer(minLength: 16)
-                    Button("Reset…") {
-                        showingResetConfirmation = true
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+        SettingsPage(title: "General", subtitle: "Choose when and where your Nook appears.") {
+            SettingsCard("MacSpaces", systemImage: "power") {
+                Toggle("Enable Nook", isOn: $app.notchEnabled)
+                Toggle("Launch at login", isOn: $app.launchAtLogin)
+            }
+            SettingsCard("Open & close", systemImage: "cursorarrow.motionlines") {
+                Toggle("Open on hover", isOn: $settings.expandOnHover)
+
+                if settings.expandOnHover {
+                    SettingsSlider(
+                        title: "Hover delay",
+                        value: $settings.hoverDelay,
+                        range: 0...1,
+                        valueText: String(format: "%.2f s", settings.hoverDelay)
+                    )
                 }
-                Text("Shows the compact live bar and opens your widget canvas at the physical notch.")
+
+                Toggle("Open by scrolling down on the notch", isOn: $settings.scrollGesturesEnabled)
+                Text("Click the notch to open it at any time. Scrolling inside an open Nook stays with the widgets.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            SurfaceWidgetEditor(
-                surface: .notch,
-                items: settings.widgets.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
-                choices: NookWidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
-                toggle: { raw in
-                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
-                    settings.setEnabled(!settings.widgets.contains(kind), for: kind)
-                },
-                remove: { raw in
-                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
-                    settings.setEnabled(false, for: kind)
-                },
-                reorder: { settings.setWidgetOrder($0.compactMap(NookWidgetKind.init(rawValue:))) }
-            )
+            SettingsCard("Displays", systemImage: "display") {
+                DisplayTargetPicker(mode: $settings.displayMode,
+                    selectedIDs: $settings.selectedDisplayIDs, preferBuiltIn: true)
+            }
+            HStack {
+                Button("Reset all Nook settings…", role: .destructive) {
+                    showingResetConfirmation = true
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
+        .alert("Reset Nook?", isPresented: $showingResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                settings.resetToDefaults()
+                theme.reset(.notch)
+                app.notchEnabled = true
+            }
+        } message: {
+            Text("This removes widget profiles and restores the default appearance, size, displays and behavior. Your notes and tray files are kept.")
+        }
+    }
+}
 
+struct NookSettingsPane: View {
+    @ObservedObject private var settings = NookSettings.shared
+
+    var body: some View {
+        SettingsPage(title: "Widgets", subtitle: "Arrange your Nook. Save a different setup for each part of your day.") {
             SettingsCard("Profile", systemImage: "rectangle.3.group") {
                 HStack {
                     Picker("Active profile", selection: $settings.activeProfileID) {
@@ -83,6 +103,41 @@ struct NookSettingsPane: View {
                 }
             }
 
+            NookWidgetEditor(
+                items: settings.widgets.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
+                choices: NookWidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
+                toggle: { raw in
+                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
+                    settings.setEnabled(!settings.widgets.contains(kind), for: kind)
+                },
+                remove: { raw in
+                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
+                    settings.setEnabled(false, for: kind)
+                },
+                reorder: { settings.setWidgetOrder($0.compactMap(NookWidgetKind.init(rawValue:))) }
+            )
+
+            SettingsCard("Lyrics & captions", systemImage: "captions.bubble") {
+                Toggle(
+                    "Show lyrics and subtitles below the widgets",
+                    isOn: $settings.showTeleprompterBar
+                )
+                Text("Shows available song lyrics or captions from a supported YouTube tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            WidgetAccessSettings()
+        }
+    }
+}
+
+struct NookSizeSettings: View {
+    @ObservedObject private var settings = NookSettings.shared
+    @ObservedObject private var theme = ThemeStore.shared
+
+    var body: some View {
             SettingsCard("Size", systemImage: "arrow.up.left.and.arrow.down.right") {
                 HStack(spacing: 10) {
                     Image(systemName: "macbook.gen2")
@@ -90,7 +145,7 @@ struct NookSettingsPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Closed size follows each display")
                             .font(.system(size: 12, weight: .semibold))
-                        Text("At rest, MacSpaces matches the physical notch. It adds side room only while a live activity is visible.")
+                        Text("The closed Nook follows your display’s notch. These controls set its open size.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -111,37 +166,16 @@ struct NookSettingsPane: View {
 
             }
 
-            SettingsCard("Open & close", systemImage: "cursorarrow.motionlines") {
-                Toggle("Expand when hovering over the closed notch", isOn: $settings.expandOnHover)
+    }
+}
 
-                if settings.expandOnHover {
-                    SettingsSlider(
-                        title: "Hover delay",
-                        value: $settings.hoverDelay,
-                        range: 0...1,
-                        valueText: String(format: "%.2f s", settings.hoverDelay)
-                    )
-                }
+struct ActivitiesSettingsPane: View {
+    @ObservedObject private var settings = NookSettings.shared
 
-                Toggle("Scroll down on the closed notch to open", isOn: $settings.scrollGesturesEnabled)
-                Text("Once open, gestures belong to the widgets. They no longer switch to the file Tray or close the Nook accidentally.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            SettingsCard("Teleprompter", systemImage: "captions.bubble") {
-                Toggle(
-                    "Show lyrics and subtitles below the widgets",
-                    isOn: $settings.showTeleprompterBar
-                )
-                Text("MacSpaces follows song lyrics—synchronized when available—or the active captions in a supported YouTube tab. You can also toggle the strip from the Nook header.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SettingsCard("Activities & displays", systemImage: "waveform.path.ecg") {
-                Text("Nook")
+    var body: some View {
+        SettingsPage(title: "Activities", subtitle: "Choose what appears beside the closed notch.") {
+            SettingsCard("Live activities", systemImage: "waveform.path.ecg") {
+                Text("Music, timers & devices")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Toggle("Now Playing", isOn: $settings.showMusicLiveActivity)
@@ -163,27 +197,10 @@ struct NookSettingsPane: View {
                 Toggle("Microphone mute", isOn: $settings.showMicrophoneLiveActivity)
                 Toggle("Focus mode", isOn: $settings.showFocusLiveActivity)
 
-                Divider()
-                DisplayTargetPicker(
-                    mode: $settings.displayMode,
-                    selectedIDs: $settings.selectedDisplayIDs,
-                    preferBuiltIn: true
-                )
-                Text("Changes appear briefly beside the closed notch. Unsupported controls stay hidden automatically.")
+                Text("System changes appear briefly. Unsupported controls stay hidden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .alert("Reset Nook?", isPresented: $showingResetConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
-                settings.resetToDefaults()
-                theme.reset(.notch)
-                app.notchEnabled = true
-            }
-        } message: {
-            Text("This removes Nook profiles and widgets, then restores its theme, size, displays, activities, and behavior defaults.")
-        }
     }
-
 }

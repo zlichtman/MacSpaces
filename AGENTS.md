@@ -16,8 +16,10 @@ widget profiles, a file Tray, compact live activities, optional Mirror, and lyri
   persistence and view factory. New cases must have titles, symbols and sizing.
 - `Sources/DesignSystem`: shared appearance and palette persistence. Only the
   modern widget style is selectable; old style identifiers decode to it.
-- `Sources/Settings`: Nook, Theme, Permissions and About. The Nook page starts with
-  enable and a visual widget editor. Theme stays above Permissions in the sidebar.
+- `Sources/Settings`: General (enable, startup, behavior, displays), Widgets
+  (profiles, visual editor, lyrics, relevant access), Appearance (palette, size,
+  motion), Activities, and About & Updates. Permissions stay with enabled widgets.
+  Settings remember the current destination; Nook shortcuts open the relevant page.
 - `Sources/Services`: media, weather, calendar, clipboard, timers and related tools.
 - `Sources/Debug`: isolated demo rendering and regression assertions.
 

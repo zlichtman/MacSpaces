@@ -25,7 +25,7 @@ struct NotchHeaderView: View {
                     Menu {
                         SurfacePaletteMenuContent(surface: .notch) {
                             viewModel.collapse()
-                            SettingsWindowController.shared.show(.theme)
+                            SettingsWindowController.shared.show(.appearance)
                         }
                     } label: {
                         Image(systemName: "paintpalette")
@@ -67,7 +67,7 @@ struct NotchHeaderView: View {
 
                 Button {
                     viewModel.collapse()
-                    SettingsWindowController.shared.show(.notch)
+                    SettingsWindowController.shared.show(.widgets)
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 10, weight: .semibold))
