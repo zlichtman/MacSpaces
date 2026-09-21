@@ -106,12 +106,13 @@ enum WebsiteDemoCapture {
                 + CGFloat(max(0, dock.widgets.count - 1)) * 6
             return CGSize(width: dock.sideDockWidth + 14, height: height)
         }
+        UserDefaults.standard.set(["#D6AF63", "#A7C080", "#73A4D5", "#D3B9D7"], forKey: "colorPickerHistory")
         dock.position = .right
         for (index, name) in ["gold", "midnight", "everforest"].enumerated() {
             song(index); palette(name)
-            profile(index == 1 ? [.media, .timer] : [.media, .clock])
+            profile(index == 1 ? [.clock, .media, .timer] : [.media, .timer, .clock])
             dock.sideDockWidth = 154
-            dockProfile(index == 0 ? [.clock, .quickActions] : index == 1 ? [.pomodoro, .quickActions] : [.progress, .clock])
+            dockProfile(index == 0 ? [.clock, .quickActions, .drinkWater] : index == 1 ? [.pomodoro, .colorPicker, .quickActions] : [.progress, .clock, .drinkWater])
             let overview = model(hardware: true); overview.state = .expanded
             let size = sideDockSize()
             render(ZStack(alignment: .top) {
@@ -122,15 +123,15 @@ enum WebsiteDemoCapture {
                     .frame(height: 650, alignment: .bottom).padding(.top, 20)
             }.frame(width: 1080, height: 680), size: CGSize(width: 1080, height: 680), to: output.appendingPathComponent("desktop-\(name).png"))
             // Each detail composition is independent of the overview.
-            profile(index == 0 ? [.media, .timer] : index == 1 ? [.clock, .media] : [.media])
+            profile(index == 0 ? [.media, .clock, .timer] : index == 1 ? [.timer, .media, .clock] : [.clock, .timer, .media])
             let nook = model(); nook.state = .expanded
             render(NotchContainerView(viewModel: nook).frame(width: 620, height: 260).frame(width: 680, height: 340),
                    size: CGSize(width: 680, height: 340), to: output.appendingPathComponent("nook-\(name).png"))
             dock.sideDockWidth = 220
-            dockProfile(index == 0 ? [.nowPlaying, .quickActions] : index == 1 ? [.clock, .nowPlaying] : [.nowPlaying, .pomodoro])
+            dockProfile(index == 0 ? [.nowPlaying, .clock, .quickActions, .drinkWater] : index == 1 ? [.clock, .nowPlaying, .colorPicker, .pomodoro] : [.nowPlaying, .pomodoro, .drinkWater, .quickActions])
             let detailSize = sideDockSize()
             render(DockContainerView(store: dock).frame(width: detailSize.width, height: detailSize.height)
-                .frame(width: 280, height: 430), size: CGSize(width: 280, height: 430),
+                .frame(width: 280, height: 640), size: CGSize(width: 280, height: 640),
                 to: output.appendingPathComponent("column-\(name).png"))
         }
         for destination in [SettingsDestination.notch, .dock, .theme] {
