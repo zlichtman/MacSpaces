@@ -58,11 +58,11 @@ enum WebsiteDemoCapture {
                 theme.notchThemeIntensity = 0.55
             } else { theme.setPreset(index == 1 ? .midnight : .forest, for: .notch) }
             var info = NowPlayingInfo()
-            info.title = index == 0 ? "Mouthful of Diamonds" : index == 1 ? "I Melt With You" : "White Dress"
-            info.artist = index == 0 ? "Phantogram" : index == 1 ? "Modern English" : "Lana Del Rey"
-            info.album = index == 0 ? "Eyelid Movies" : index == 1 ? "Pillow Lips" : "Chemtrails Over the Country Club"
-            info.isPlaying = true; info.elapsed = 74; info.duration = 253
-            info.artwork = NSImage(contentsOfFile: index == 0 ? "/private/tmp/macspaces-phantogram.jpg" : index == 1 ? "/private/tmp/macspaces-pillow-lips.jpg" : "/private/tmp/macspaces-lana.jpg")!
+            info.title = index == 0 ? "Mouthful of Diamonds" : index == 1 ? "I Melt With You" : "Catacombs"
+            info.artist = index == 0 ? "Phantogram" : index == 1 ? "Modern English" : "Fog Lake"
+            info.album = index == 0 ? "Eyelid Movies" : index == 1 ? "Pillow Lips" : "Tragedy Reel"
+            info.isPlaying = true; info.elapsed = 74; info.duration = index == 2 ? 201 : 253
+            info.artwork = NSImage(contentsOfFile: index == 0 ? "/private/tmp/macspaces-phantogram.jpg" : index == 1 ? "/private/tmp/macspaces-pillow-lips.jpg" : "/private/tmp/macspaces-fog-lake.jpg")!
             services.nowPlaying.setPreviewInfo(info)
             profile([.media, .weather, .clock, .notes])
             let overview = model(); overview.state = .expanded
@@ -71,7 +71,12 @@ enum WebsiteDemoCapture {
             overview.state = .collapsed
             render(camera(NotchContainerView(viewModel: overview)).frame(width: 1000, height: 620, alignment: .top),
                    size: CGSize(width: 1000, height: 620), to: output.appendingPathComponent("closed-\(name).png"))
-            profile(index == 0 ? [.media, .weather, .clock, .clipboard] : [.media, .pomodoro, .clock, .quickActions])
+            let detailProfiles: [[NookWidgetKind]] = [
+                [.weather, .clock, .media, .clipboard],
+                [.pomodoro, .media, .quickActions],
+                [.notes, .media, .timer, .clock],
+            ]
+            profile(detailProfiles[index])
             let detail = model(); detail.state = .expanded
             render(camera(NotchContainerView(viewModel: detail)).frame(width: 800, height: 330, alignment: .top),
                    size: CGSize(width: 800, height: 330), to: output.appendingPathComponent("nook-\(name).png"))
@@ -80,7 +85,7 @@ enum WebsiteDemoCapture {
             render(camera(NotchContainerView(viewModel: tray)).frame(width: 800, height: 330, alignment: .top),
                    size: CGSize(width: 800, height: 330), to: output.appendingPathComponent("tray-\(name).png"))
         }
-        for destination in [SettingsDestination.notch, .theme, .permissions] {
+        for destination in SettingsDestination.allCases {
             SettingsNavigationModel.shared.selection = destination
             render(SettingsView().frame(width: 980, height: 760), size: CGSize(width: 980, height: 760),
                    to: output.appendingPathComponent("settings-\(destination.rawValue).png"))

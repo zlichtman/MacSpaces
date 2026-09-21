@@ -31,9 +31,9 @@ final class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func show(_ destination: SettingsDestination = .notch) {
+    func show(_ destination: SettingsDestination? = nil) {
         guard let window else { return }
-        SettingsNavigationModel.shared.selection = destination
+        if let destination { SettingsNavigationModel.shared.selection = destination }
 
         if !window.isVisible {
             positionOnPointerScreen(window)

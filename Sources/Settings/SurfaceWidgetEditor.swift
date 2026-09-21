@@ -8,9 +8,8 @@ struct WidgetEditorItem: Identifiable, Equatable {
     let symbol: String
 }
 
-/// Both surfaces share selection, removal, keyboard movement and drag reordering.
-struct SurfaceWidgetEditor: View {
-    let surface: ThemeSurface
+/// Visual Nook selection, removal and drag reordering.
+struct NookWidgetEditor: View {
     let items: [WidgetEditorItem]
     let choices: [WidgetEditorItem]
     let toggle: (String) -> Void
@@ -22,7 +21,7 @@ struct SurfaceWidgetEditor: View {
     @State private var showingLibrary = false
     @State private var search = ""
 
-    private var tokens: ThemeTokens { surface == .notch ? theme.notch : theme.dock }
+    private var tokens: ThemeTokens { theme.notch }
     private var selected: WidgetEditorItem? { items.first { $0.id == selectedID } }
     private var filteredChoices: [WidgetEditorItem] {
         choices.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
@@ -31,7 +30,7 @@ struct SurfaceWidgetEditor: View {
     var body: some View {
         SettingsCard("Your widgets", systemImage: "square.grid.2x2") {
             VStack(spacing: 0) {
-                if surface == .notch {
+                Group {
                     HStack {
                         Label("Nook", systemImage: "rectangle.grid.1x2.fill")
                         Spacer()
@@ -94,7 +93,7 @@ struct SurfaceWidgetEditor: View {
                     .padding(12)
                 }
             }
-            .background(tokens.surface, in: RoundedRectangle(cornerRadius: surface == .notch ? 22 : 18))
+            .background(tokens.surface, in: RoundedRectangle(cornerRadius: 22))
             .environment(\.colorScheme, tokens.colorScheme)
             .foregroundStyle(tokens.colorScheme == .dark ? Color.white : Color.black)
 

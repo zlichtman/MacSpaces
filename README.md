@@ -20,8 +20,8 @@ macOS 13 or later · Apple silicon and Intel · Signed and notarized · MIT lice
   for work, listening or a quieter desktop.
 - Drop files onto the notch to open the Tray, then drag them into another app.
 - Compact live activities for music, timers, power and supported system controls.
-- Settings start with Enable Nook and a visual widget editor. Theme has its own
-  sidebar destination above Permissions.
+- Settings are organized into General, Widgets, Appearance and Activities.
+  Widget access appears with the widgets that need it; About & Updates is separate.
 
 Version 1.1 focuses entirely on the Nook. Existing profiles and settings are
 preserved; legacy style choices

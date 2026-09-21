@@ -34,7 +34,7 @@ struct SettingsPage<Content: View>: View {
                 Color(nsColor: .windowBackgroundColor)
                 LinearGradient(
                     colors: [
-                        theme.dock.secondaryAccent.opacity(0.022),
+                        theme.notch.secondaryAccent.opacity(0.022),
                         Color.clear,
                     ],
                     startPoint: .topTrailing,

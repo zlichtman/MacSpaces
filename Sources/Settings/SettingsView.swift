@@ -7,27 +7,27 @@ import ApplicationServices
 import UserNotifications
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case notch
-    case theme
-    case permissions
-    case about
+    case general, widgets, appearance, activities, about
 
+    static var primary: [Self] { [.general, .widgets, .appearance, .activities] }
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .notch: return "Nook"
-        case .theme: return "Theme"
-        case .permissions: return "Permissions"
-        case .about: return "About"
+        case .general: return "General"
+        case .widgets: return "Widgets"
+        case .appearance: return "Appearance"
+        case .activities: return "Activities"
+        case .about: return "About & Updates"
         }
     }
 
     var symbol: String {
         switch self {
-        case .notch: return "macbook.gen2"
-        case .theme: return "paintpalette"
-        case .permissions: return "hand.raised"
+        case .general: return "gearshape"
+        case .widgets: return "square.grid.2x2"
+        case .appearance: return "paintpalette"
+        case .activities: return "waveform.path.ecg"
         case .about: return "info.circle"
         }
     }
@@ -36,7 +36,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 @MainActor
 final class SettingsNavigationModel: ObservableObject {
     static let shared = SettingsNavigationModel()
-    @Published var selection: SettingsDestination = .notch
+    @Published var selection: SettingsDestination = .general
 }
 
 struct SettingsView: View {
@@ -71,13 +71,17 @@ struct SettingsView: View {
             .padding(.bottom, 16)
 
             VStack(spacing: 3) {
-                ForEach(SettingsDestination.allCases) {
+                ForEach(SettingsDestination.primary) {
                     sidebarItem($0)
                 }
             }
             .padding(.horizontal, 10)
 
             Spacer(minLength: 14)
+            Divider().padding(.horizontal, 20)
+            sidebarItem(.about)
+                .padding(10)
+                .padding(.bottom, 8)
         }
         .background(Color(nsColor: .underPageBackgroundColor))
     }
@@ -118,16 +122,17 @@ struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch navigation.selection {
-        case .notch: NookSettingsPane()
-        case .theme: ThemeSettingsPane()
-        case .permissions: PermissionsSettingsPane()
+        case .general: GeneralSettingsPane()
+        case .widgets: NookSettingsPane()
+        case .appearance: AppearanceSettingsPane()
+        case .activities: ActivitiesSettingsPane()
         case .about: AboutSettingsPane()
         }
     }
 }
 
-struct SurfaceThemePicker: View {
-    let surface: ThemeSurface
+struct NookThemePicker: View {
+    private let surface = ThemeSurface.notch
 
     @ObservedObject private var theme = ThemeStore.shared
 
@@ -168,50 +173,27 @@ struct SurfaceThemePicker: View {
             DisclosureGroup("Fine-tune appearance") {
             SettingsSlider(
                 title: "Color intensity",
-                value: intensityBinding,
+                value: $theme.notchThemeIntensity,
                 range: 0...1,
-                valueText: "\(Int(intensityBinding.wrappedValue * 100))%"
+                valueText: "\(Int(theme.notchThemeIntensity * 100))%"
             )
             SettingsSlider(
                 title: "Widget definition",
-                value: contrastBinding,
+                value: $theme.notchTileContrast,
                 range: 0...1,
-                valueText: "\(Int(contrastBinding.wrappedValue * 100))%"
+                valueText: "\(Int(theme.notchTileContrast * 100))%"
             )
             SettingsSlider(
                 title: "Ambient glow",
-                value: glowBinding,
+                value: $theme.notchGlowStrength,
                 range: 0...1,
-                valueText: "\(Int(glowBinding.wrappedValue * 100))%"
+                valueText: "\(Int(theme.notchGlowStrength * 100))%"
             )
 
-            if surface == .notch {
-                SettingsSlider(
-                    title: "Surface opacity",
-                    value: $theme.notchOpacity,
-                    range: 0.84...1,
-                    valueText: "\(Int(theme.notchOpacity * 100))%"
-                )
-                SettingsSlider(
-                    title: "Corner radius",
-                    value: $theme.notchCornerRadius,
-                    range: 14...34,
-                    valueText: "\(Int(theme.notchCornerRadius)) pt"
-                )
-            } else {
-                SettingsSlider(
-                    title: "Surface opacity",
-                    value: $theme.dockOpacity,
-                    range: 0.72...1,
-                    valueText: "\(Int(theme.dockOpacity * 100))%"
-                )
-                SettingsSlider(
-                    title: "Corner radius",
-                    value: $theme.dockCornerRadius,
-                    range: 14...34,
-                    valueText: "\(Int(theme.dockCornerRadius)) pt"
-                )
-            }
+            SettingsSlider(title: "Surface opacity", value: $theme.notchOpacity,
+                range: 0.84...1, valueText: "\(Int(theme.notchOpacity * 100))%")
+            SettingsSlider(title: "Corner radius", value: $theme.notchCornerRadius,
+                range: 14...34, valueText: "\(Int(theme.notchCornerRadius)) pt")
             }
 
         }
@@ -286,59 +268,21 @@ struct SurfaceThemePicker: View {
 
     private var customSurfaceColor: Binding<Color> {
         Binding(
-            get: {
-                let hex = surface == .notch ? theme.customNotchHex : theme.customDockHex
-                return Color(themeHex: hex) ?? .black
-            },
+            get: { Color(themeHex: theme.customNotchHex) ?? .black },
             set: { color in
-                let hex = NSColor(color).themeHexString
-                if surface == .notch {
-                    theme.customNotchHex = hex
-                } else {
-                    theme.customDockHex = hex
-                }
-                theme.setPreset(.custom, for: surface)
+                theme.customNotchHex = NSColor(color).themeHexString
+                theme.setPreset(.custom, for: .notch)
             }
-        )
-    }
-
-    private var intensityBinding: Binding<Double> {
-        surfaceBinding(
-            notch: \.notchThemeIntensity,
-            dock: \.dockThemeIntensity
-        )
-    }
-
-    private var contrastBinding: Binding<Double> {
-        surfaceBinding(
-            notch: \.notchTileContrast,
-            dock: \.dockTileContrast
-        )
-    }
-
-    private var glowBinding: Binding<Double> {
-        surfaceBinding(
-            notch: \.notchGlowStrength,
-            dock: \.dockGlowStrength
-        )
-    }
-
-    private func surfaceBinding(
-        notch: ReferenceWritableKeyPath<ThemeStore, Double>,
-        dock: ReferenceWritableKeyPath<ThemeStore, Double>
-    ) -> Binding<Double> {
-        Binding(
-            get: { theme[keyPath: surface == .notch ? notch : dock] },
-            set: { theme[keyPath: surface == .notch ? notch : dock] = $0 }
         )
     }
 }
 
-private struct ThemeSettingsPane: View {
+private struct AppearanceSettingsPane: View {
     @ObservedObject private var theme = ThemeStore.shared
     var body: some View {
-        SettingsPage(title: "Theme", subtitle: "Make your Nook feel at home.") {
-            SurfaceThemePicker(surface: .notch)
+        SettingsPage(title: "Appearance", subtitle: "Choose a palette and the size of your Nook.") {
+            NookThemePicker()
+            NookSizeSettings()
             SettingsCard("Motion", systemImage: "sparkles") {
                 Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
             }
@@ -346,67 +290,51 @@ private struct ThemeSettingsPane: View {
     }
 }
 
-private struct PermissionsSettingsPane: View {
+/// Access belongs to the enabled widget, rather than a separate settings destination.
+struct WidgetAccessSettings: View {
+    @ObservedObject private var settings = NookSettings.shared
+    @State private var accessRevision = 0
     @MainActor private static let locationManager = CLLocationManager()
 
+    private var needsAccess: Bool {
+        settings.widgets.contains { [.mirror, .calendar, .todos, .media, .weather].contains($0) }
+    }
+
     var body: some View {
-        SettingsPage(
-            title: "Permissions",
-            subtitle: "Features ask only when used. MacSpaces keeps personal data on this Mac."
-        ) {
-            SettingsCard("Feature access", systemImage: "hand.raised") {
-                PermissionRow(
-                    title: "Camera",
-                    detail: "Mirror in the Notch Hub",
-                    symbol: "camera",
-                    status: cameraStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
-                )
-
-                PermissionRow(
-                    title: "Calendars",
-                    detail: "Calendar and meeting widgets",
-                    symbol: "calendar",
-                    status: eventStatus(.event),
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
-                )
-                PermissionRow(
-                    title: "Reminders",
-                    detail: "Todo widget",
-                    symbol: "checklist",
-                    status: eventStatus(.reminder),
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"
-                )
-
-
-
-
-                PermissionRow(
-                    title: "Media apps & browsers",
-                    detail: "Now Playing metadata fallback",
-                    symbol: "music.note",
-                    status: .review,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
-                )
+        if needsAccess {
+            SettingsCard("Widget access", systemImage: "hand.raised") {
+                Text("Only the widgets in this profile are listed. Access is requested when you use a feature.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if settings.widgets.contains(.media) {
+                    PermissionRow(title: "Music & browsers", detail: "Now Playing and lyrics", symbol: "music.note",
+                        status: .review, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+                }
+                if settings.widgets.contains(.weather) {
+                    PermissionRow(title: "Location", detail: "Weather near you; approximate location is used if unavailable", symbol: "location",
+                        status: locationStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+                }
+                if settings.widgets.contains(.calendar) {
+                    PermissionRow(title: "Calendars", detail: "Your upcoming events", symbol: "calendar",
+                        status: eventStatus(.event), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+                }
+                if settings.widgets.contains(.todos) {
+                    PermissionRow(title: "Reminders", detail: "Your to-do list", symbol: "checklist",
+                        status: eventStatus(.reminder), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
+                }
+                if settings.widgets.contains(.mirror) {
+                    PermissionRow(title: "Camera", detail: "Mirror preview", symbol: "camera",
+                        status: cameraStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
+                }
             }
-
-            SettingsCard("Weather", systemImage: "cloud.sun") {
-                PermissionRow(title: "Location", detail: "Local weather when the Weather widget is enabled", symbol: "location", status: locationStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
-            }
-            SettingsCard("Privacy", systemImage: "lock.shield") {
-                Label("Clipboard history, notes, profiles, and tray items stay on this Mac.", systemImage: "checkmark.shield")
-                Label("Weather, lyrics, and app updates use their respective online services.", systemImage: "network")
+            .id(accessRevision)
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                accessRevision += 1
             }
         }
     }
 
     private var cameraStatus: PermissionState {
         mediaStatus(AVCaptureDevice.authorizationStatus(for: .video))
-    }
-
-    private var microphoneStatus: PermissionState {
-        mediaStatus(AVCaptureDevice.authorizationStatus(for: .audio))
     }
 
     private func mediaStatus(_ status: AVAuthorizationStatus) -> PermissionState {
@@ -491,13 +419,12 @@ private struct PermissionRow: View {
 }
 
 private struct AboutSettingsPane: View {
-    @ObservedObject private var app = AppSettings.shared
     @ObservedObject private var updater = UpdateService.shared
 
     var body: some View {
         SettingsPage(
             title: "About MacSpaces",
-            subtitle: "A local-first, open-source control surface for macOS."
+            subtitle: "Version information and software updates."
         ) {
             VStack(spacing: 14) {
                 MacSpacesMark(size: 82)
@@ -506,7 +433,7 @@ private struct AboutSettingsPane: View {
                 Text("Version \(version)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Music, focus, files and everyday tools. One thoughtfully arranged Nook.")
+                Text("Music, widgets and files at your notch.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -545,12 +472,7 @@ private struct AboutSettingsPane: View {
                 }
             }
 
-            SettingsCard("Startup", systemImage: "power") {
-                Toggle("Launch MacSpaces at login", isOn: $app.launchAtLogin)
-                Text("MacSpaces launches directly as a menu-bar app—there is no setup tour or extra first-run window.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+
         }
     }
 
