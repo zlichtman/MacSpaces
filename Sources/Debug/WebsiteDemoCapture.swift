@@ -90,34 +90,48 @@ enum WebsiteDemoCapture {
                 theme.applyCoordinatedPreset(name == "sunset" ? .sunset : .midnight)
             }
         }
-        // Device overview: actual native surfaces placed at their desktop edges.
-        palette("gold")
-        profile([.media, .clock])
-        dockProfile([.pomodoro, .progress, .quickActions])
-        let overview = model(hardware: true); overview.state = .expanded
-        let overviewDock = dockSize()
-        render(ZStack(alignment: .top) {
-            NotchContainerView(viewModel: overview).overlay(alignment: .top) {
-                UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
-            }.frame(width: 700, height: 254)
-            VStack { Spacer(); DockContainerView(store: dock).frame(width: overviewDock.width, height: overviewDock.height).padding(.bottom, 24) }
-        }.frame(width: 1000, height: 625), size: CGSize(width: 1000, height: 625), to: output.appendingPathComponent("desktop-gold.png"))
-        palette("gold")
-        for (name, widgets) in [("music", [NookWidgetKind.media, .clock]), ("focus", [.clock, .timer])] {
-            profile(widgets, style: name == "music" ? .frame : .terminal)
-            let nook = model(); nook.state = .expanded
-            render(NotchContainerView(viewModel: nook).frame(width: 580, height: 260).padding(.top, 28).frame(width: 620, height: 324), size: CGSize(width: 620, height: 324), to: output.appendingPathComponent("notch-\(name).png"))
+        func song(_ index: Int) {
+            var info = NowPlayingInfo()
+            let songs = [("Mouthful of Diamonds", "Phantogram", "Eyelid Movies", artworkPath),
+                         ("I Melt With You", "Modern English", "Pillow Lips", "/private/tmp/macspaces-pillow-lips.jpg"),
+                         ("White Dress", "Lana Del Rey", "Chemtrails Over the Country Club", "/private/tmp/macspaces-lana.jpg")]
+            let selected = songs[index]
+            info.title = selected.0; info.artist = selected.1; info.album = selected.2
+            info.isPlaying = true; info.duration = index == 2 ? 333 : 253; info.elapsed = 74
+            info.artwork = NSImage(contentsOfFile: selected.3)!
+            services.nowPlaying.setPreviewInfo(info)
         }
-        profile([.media, .timer, .clock])
-        settings.expandedWidth = 560
-        settings.fitWidthToProfile = false
-        let tray = model(); tray.state = .expanded; tray.selectedTab = .tray
-        render(NotchContainerView(viewModel: tray).frame(width: 580, height: 260).padding(.top, 28).frame(width: 620, height: 324), size: CGSize(width: 620, height: 324), to: output.appendingPathComponent("notch-tray.png"))
-        for (name, widgets) in [("listen", [WidgetKind.nowPlaying, .quickActions]), ("plan", [.progress, .clock]), ("focus", [.pomodoro, .nowPlaying, .clock])] {
-            palette(name == "listen" ? "gold" : name == "plan" ? "everforest" : "midnight")
-            dockProfile(widgets)
-            let size = dockSize()
-            render(DockContainerView(store: dock).frame(width: size.width, height: size.height).frame(width: size.width + 48, height: 184), size: CGSize(width: size.width + 48, height: 184), to: output.appendingPathComponent("dock-\(name).png"))
+        func sideDockSize() -> CGSize {
+            let height = dock.widgets.reduce(CGFloat(14)) { $0 + $1.kind.axisLength(tile: CGFloat(dock.tileSize), spacing: 6) }
+                + CGFloat(max(0, dock.widgets.count - 1)) * 6
+            return CGSize(width: dock.sideDockWidth + 14, height: height)
+        }
+        dock.position = .right
+        for (index, name) in ["gold", "midnight", "everforest"].enumerated() {
+            song(index); palette(name)
+            profile(index == 1 ? [.media, .timer] : [.media, .clock])
+            dock.sideDockWidth = 154
+            dockProfile(index == 0 ? [.clock, .quickActions] : index == 1 ? [.pomodoro, .quickActions] : [.progress, .clock])
+            let overview = model(hardware: true); overview.state = .expanded
+            let size = sideDockSize()
+            render(ZStack(alignment: .top) {
+                NotchContainerView(viewModel: overview).overlay(alignment: .top) {
+                    UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
+                }.frame(width: 700, height: 254)
+                HStack { Spacer(); DockContainerView(store: dock).frame(width: size.width, height: size.height).padding(.trailing, 12) }
+                    .frame(height: 650, alignment: .bottom).padding(.top, 20)
+            }.frame(width: 1080, height: 680), size: CGSize(width: 1080, height: 680), to: output.appendingPathComponent("desktop-\(name).png"))
+            // Each detail composition is independent of the overview.
+            profile(index == 0 ? [.media, .timer] : index == 1 ? [.clock, .media] : [.media])
+            let nook = model(); nook.state = .expanded
+            render(NotchContainerView(viewModel: nook).frame(width: 620, height: 260).frame(width: 680, height: 340),
+                   size: CGSize(width: 680, height: 340), to: output.appendingPathComponent("nook-\(name).png"))
+            dock.sideDockWidth = 220
+            dockProfile(index == 0 ? [.nowPlaying, .quickActions] : index == 1 ? [.clock, .nowPlaying] : [.nowPlaying, .pomodoro])
+            let detailSize = sideDockSize()
+            render(DockContainerView(store: dock).frame(width: detailSize.width, height: detailSize.height)
+                .frame(width: 280, height: 430), size: CGSize(width: 280, height: 430),
+                to: output.appendingPathComponent("column-\(name).png"))
         }
         for destination in [SettingsDestination.notch, .dock, .theme] {
             SettingsNavigationModel.shared.selection = destination
