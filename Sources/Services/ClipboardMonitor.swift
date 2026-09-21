@@ -78,6 +78,13 @@ final class ClipboardMonitor: ObservableObject {
         entries.insert(ClipboardEntry(text: entry.text, date: Date()), at: 0)
     }
 
+#if DEBUG
+    func setPreviewEntries(_ texts: [String]) {
+        stop()
+        entries = texts.map { ClipboardEntry(text: $0, date: Date()) }
+    }
+#endif
+
     func clear() {
         entries.removeAll()
     }

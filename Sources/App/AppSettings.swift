@@ -2,18 +2,13 @@ import Foundation
 import Combine
 import ServiceManagement
 
-/// App-level settings: which modules run and the login item.
-/// Module-specific options live in `NotchSettings` and `DockStore`.
+/// Nook activation and login item preferences.
 @MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @Published var notchEnabled: Bool {
         didSet { defaults.set(notchEnabled, forKey: "notchEnabled") }
-    }
-
-    @Published var dockEnabled: Bool {
-        didSet { defaults.set(dockEnabled, forKey: "dockEnabled") }
     }
 
     @Published var launchAtLogin: Bool {
@@ -27,11 +22,10 @@ final class AppSettings: ObservableObject {
     private init() {
         defaults.register(defaults: [
             "notchEnabled": true,
-            "dockEnabled": true,
         ])
 
         notchEnabled = defaults.bool(forKey: "notchEnabled")
-        dockEnabled = defaults.bool(forKey: "dockEnabled")
+        defaults.set(false, forKey: "dockEnabled")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

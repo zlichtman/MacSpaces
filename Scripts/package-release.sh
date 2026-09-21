@@ -174,6 +174,11 @@ hdiutil attach \
   "$DMG_STAGED" \
   >/dev/null
 codesign --verify --deep --strict --verbose=2 "$VERIFY_MOUNT/MacSpaces.app"
+if [[ "$NOTARIZE" == "1" ]]; then
+  xcrun stapler validate "$VERIFY_MOUNT/MacSpaces.app"
+  spctl --assess --type execute --verbose=2 "$VERIFY_MOUNT/MacSpaces.app"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_STAGED"
+fi
 MOUNTED_ARCHS="$(lipo -archs "$VERIFY_MOUNT/MacSpaces.app/Contents/MacOS/MacSpaces")"
 if [[ "$MOUNTED_ARCHS" != *arm64* || "$MOUNTED_ARCHS" != *x86_64* ]]; then
   echo "Mounted executable is not universal: $MOUNTED_ARCHS" >&2

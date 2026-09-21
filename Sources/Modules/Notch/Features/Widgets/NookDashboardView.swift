@@ -30,14 +30,15 @@ struct NookDashboardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 compatibleWidgetScroll {
-                    let fullHeight = min(max(138, proxy.size.height), 180)
+                    let fullHeight = max(138, proxy.size.height)
+                    let widths = visualOrder.fittedNookWidths(availableWidth: proxy.size.width)
                     let compactKinds = compactWidgetKinds
                     NookTilesLayout(spacing: 10) {
                         ForEach(visualOrder) { kind in
                             let compact = compactKinds.contains(kind)
                             dashboardTile(
                                 kind: kind,
-                                width: kind.preferredWidth,
+                                width: widths[kind] ?? kind.preferredWidth,
                                 height: compact ? (fullHeight - 10) / 2 : fullHeight,
                                 compact: compact
                             )
@@ -300,19 +301,16 @@ private struct NookDashboardTile: View {
                 }
             ),
             WidgetContextMenuItem(
-                title: "Widget Look",
-                systemImage: "paintbrush",
-                children: WidgetVisualStyle.styles(for: kind).map { style in
-                    WidgetContextMenuItem(
-                        title: style.title,
-                        systemImage: style.symbol,
-                        isSelected: visualStyle == style,
-                        action: {
-                            viewModel.settings.setWidgetStyle(style, for: kind)
-                        }
-                    )
-                }
+                title: "Move Earlier", systemImage: "arrow.left",
+                isEnabled: viewModel.settings.widgets.first != kind,
+                action: { viewModel.settings.moveWidget(kind, offset: -1) }
             ),
+            WidgetContextMenuItem(
+                title: "Move Later", systemImage: "arrow.right",
+                isEnabled: viewModel.settings.widgets.last != kind,
+                action: { viewModel.settings.moveWidget(kind, offset: 1) }
+            ),
+
         ]
         if kind == .shortcuts {
             items.append(
@@ -389,6 +387,16 @@ private struct NookDashboardTile: View {
             NookBatteryWidget(monitor: viewModel.powerMonitor, compact: compact)
         case .clock:
             NookClockWidget(style: visualStyle, compact: compact)
+        case .weather:
+            WeatherWidget(service: AppServices.shared.weather, compact: compact, surface: .notch,
+                          onDetailsChanged: { viewModel.isWeatherDetailsPresented = $0 })
+        case .clipboard:
+            ClipboardWidget(monitor: AppServices.shared.clipboard)
+        case .pomodoro:
+            PomodoroWidget(compact: compact)
+        case .quickActions:
+            QuickActionsWidget()
+
         }
     }
 }

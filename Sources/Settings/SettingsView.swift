@@ -8,7 +8,7 @@ import UserNotifications
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
     case notch
-    case dock
+    case theme
     case permissions
     case about
 
@@ -16,8 +16,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .notch: return "OpenNotch"
-        case .dock: return "OpenDock"
+        case .notch: return "Nook"
+        case .theme: return "Theme"
         case .permissions: return "Permissions"
         case .about: return "About"
         }
@@ -26,7 +26,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .notch: return "macbook.gen2"
-        case .dock: return "dock.rectangle"
+        case .theme: return "paintpalette"
         case .permissions: return "hand.raised"
         case .about: return "info.circle"
         }
@@ -119,382 +119,9 @@ struct SettingsView: View {
     private var detail: some View {
         switch navigation.selection {
         case .notch: NookSettingsPane()
-        case .dock: DockSettingsPane()
+        case .theme: ThemeSettingsPane()
         case .permissions: PermissionsSettingsPane()
         case .about: AboutSettingsPane()
-        }
-    }
-}
-
-private struct DockSettingsPane: View {
-    @ObservedObject private var app = AppSettings.shared
-    @ObservedObject private var store = DockStore.shared
-    @ObservedObject private var theme = ThemeStore.shared
-    @ObservedObject private var audioMixer = AppServices.shared.audioMixer
-    @State private var showingAudioMixer = false
-    @State private var showingResetConfirmation = false
-
-    var body: some View {
-        SettingsPage(
-            title: "OpenDock",
-            subtitle: "Everything for the dock surface, in one place."
-        ) {
-            SettingsCard("OpenDock", systemImage: "power") {
-                HStack {
-                    Toggle("Enable OpenDock", isOn: $app.dockEnabled)
-                    Spacer(minLength: 16)
-                    Button("Reset…") {
-                        showingResetConfirmation = true
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                }
-                Text("Places a configurable widget strip at your chosen screen edge.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            SettingsCard("Window previews", systemImage: "rectangle.on.rectangle") {
-                Toggle(
-                    "Show live windows when hovering over apps in Apple’s Dock",
-                    isOn: $store.windowPreviewsEnabled
-                )
-                .onChange(of: store.windowPreviewsEnabled) { enabled in
-                    guard enabled else { return }
-                    requestWindowPreviewPermissions()
-                }
-
-                Text("Hover a running app to see every open, minimized, and hidden window. Select one to bring that exact window forward. The App Switcher widget uses the same browser.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if store.windowPreviewsEnabled {
-                    HStack(spacing: 8) {
-                        previewPermissionBadge(
-                            title: "Accessibility",
-                            granted: AXIsProcessTrusted(),
-                            symbol: "accessibility",
-                            settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                        )
-                        previewPermissionBadge(
-                            title: "Screen Recording",
-                            granted: CGPreflightScreenCaptureAccess(),
-                            symbol: "record.circle",
-                            settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        )
-                    }
-
-                    SettingsSlider(
-                        title: "Hover delay",
-                        value: $store.windowPreviewDelay,
-                        range: 0.05...0.75,
-                        valueText: String(format: "%.2f s", store.windowPreviewDelay)
-                    )
-
-                    Picker(
-                        "Maximum previews",
-                        selection: $store.windowPreviewLimit
-                    ) {
-                        Text("4").tag(4)
-                        Text("6").tag(6)
-                        Text("8").tag(8)
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-
-            SettingsCard("App audio", systemImage: "speaker.wave.2") {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Per-app volume profiles")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Set a separate level or mute state for each app. MacSpaces remembers it by bundle identifier.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 12)
-                    Button("Open App Mixer") {
-                        audioMixer.start()
-                        showingAudioMixer = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .popover(
-                        isPresented: $showingAudioMixer,
-                        arrowEdge: .top
-                    ) {
-                        AudioMixerPanel(mixer: audioMixer)
-                    }
-                }
-
-                if !store.widgets.contains(where: { $0.kind == .audio }) {
-                    Button {
-                        store.add(.audio)
-                    } label: {
-                        Label(
-                            "Add Audio Controls to OpenDock",
-                            systemImage: "plus"
-                        )
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-            .onChange(of: showingAudioMixer) { showing in
-                if !showing,
-                   !store.widgets.contains(where: { $0.kind == .audio }) {
-                    audioMixer.stop()
-                }
-            }
-
-            SurfaceThemePicker(surface: .dock)
-
-            SettingsCard("Profile", systemImage: "rectangle.3.group") {
-                HStack {
-                    Picker("Active profile", selection: $store.activeProfileID) {
-                        ForEach(store.profiles) { profile in
-                            Text(profile.name).tag(profile.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 220)
-
-                    TextField(
-                        "Profile name",
-                        text: Binding(
-                            get: { store.activeProfile.name },
-                            set: { store.renameProfile(store.activeProfile, to: $0) }
-                        )
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    Menu {
-                        Button("New Empty Profile") {
-                            store.addProfile(named: "Dock \(store.profiles.count + 1)")
-                        }
-                        Button("Duplicate Current") {
-                            store.addProfile(
-                                named: "\(store.activeProfile.name) Copy",
-                                copyingCurrent: true
-                            )
-                        }
-                        Divider()
-                        Button("Delete Current", role: .destructive) {
-                            store.removeProfile(store.activeProfile)
-                        }
-                        .disabled(store.profiles.count == 1)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-            }
-
-            SettingsCard("Widgets", systemImage: "square.grid.2x2") {
-                HStack {
-                    Text("\(store.widgets.count) selected")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Clear") {
-                        store.widgets = []
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(store.widgets.isEmpty)
-                }
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 150), spacing: 8)],
-                    spacing: 8
-                ) {
-                    ForEach(WidgetKind.allCases) { kind in
-                        dockWidgetCard(kind)
-                    }
-                }
-
-                Text("Select cards to add or remove widgets. Drag widgets directly in OpenDock to reorder them; glanceable widgets stack at their designed default size.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SettingsCard("Placement", systemImage: "rectangle.bottomthird.inset.filled") {
-                Picker("Screen edge", selection: $store.position) {
-                    ForEach(DockPosition.allCases) { position in
-                        Text(position.title).tag(position)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                SettingsSlider(
-                    title: "Edge offset",
-                    value: $store.edgeOffset,
-                    range: 0...40,
-                    valueText: "\(Int(store.edgeOffset)) pt"
-                )
-
-                DisplayTargetPicker(
-                    mode: $store.displayMode,
-                    selectedIDs: $store.selectedDisplayIDs,
-                    preferBuiltIn: false
-                )
-            }
-
-            SettingsCard("Sizing", systemImage: "arrow.up.left.and.arrow.down.right") {
-                SettingsSlider(
-                    title: "Widget size",
-                    value: $store.tileSize,
-                    range: 56...96,
-                    valueText: "\(Int(store.tileSize)) pt"
-                )
-
-                if store.effectivePosition.isVertical {
-                    SettingsSlider(
-                        title: "Side Dock width",
-                        value: $store.sideDockWidth,
-                        range: 104...220,
-                        valueText: "\(Int(store.sideDockWidth)) pt"
-                    )
-                }
-            }
-
-            SettingsCard("Behavior", systemImage: "cursorarrow.rays") {
-                Toggle("Auto-hide at the screen edge", isOn: $store.autoHide)
-                if store.autoHide {
-                    SettingsSlider(
-                        title: "Hide delay",
-                        value: $store.hideDelay,
-                        range: 0.1...1.2,
-                        valueText: String(format: "%.2f s", store.hideDelay)
-                    )
-                }
-                Toggle("Dock is visible", isOn: $store.isDockVisible)
-            }
-        }
-        .alert("Reset OpenDock?", isPresented: $showingResetConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
-                store.resetToDefaults()
-                theme.reset(.dock)
-                app.dockEnabled = true
-            }
-        } message: {
-            Text("This removes OpenDock profiles and widgets, then restores its theme, placement, size, displays, previews, and behavior defaults.")
-        }
-    }
-
-    private func requestWindowPreviewPermissions() {
-        if !AXIsProcessTrusted() {
-            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-            AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
-        }
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-        }
-    }
-
-    private func previewPermissionBadge(
-        title: String,
-        granted: Bool,
-        symbol: String,
-        settingsURL: String
-    ) -> some View {
-        Button {
-            guard let url = URL(string: settingsURL) else { return }
-            NSWorkspace.shared.open(url)
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: symbol)
-                Text(title)
-                    .lineLimit(1)
-                Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(granted ? Color.green : Color.orange)
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-            .background(
-                Color.primary.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-        .help(granted ? "\(title) is allowed" : "Open \(title) settings")
-    }
-
-    private func dockWidgetCard(_ kind: WidgetKind) -> some View {
-        let instance = store.widgets.first { $0.kind == kind }
-        let selected = instance != nil
-        return HStack(spacing: 0) {
-            Button {
-                if let instance {
-                    store.remove(instance)
-                } else {
-                    store.add(kind)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: kind.systemImage)
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 20)
-                    Text(kind.title)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(
-                            selected
-                                ? Color.black.opacity(0.72)
-                                : Color.primary.opacity(0.24)
-                        )
-                }
-                .padding(.leading, 10)
-                .padding(.trailing, selected ? 4 : 10)
-                .frame(maxWidth: .infinity, minHeight: 42)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if let instance {
-                Menu {
-                    Section("Look") {
-                        ForEach(WidgetVisualStyle.styles(for: kind)) { style in
-                            Button {
-                                store.setWidgetStyle(style, for: instance)
-                            } label: {
-                                Label(style.title, systemImage: style.symbol)
-                            }
-                        }
-                    }
-                    Button("Add another") {
-                        store.duplicate(instance)
-                    }
-                    Divider()
-                    Button("Remove \(kind.title)", role: .destructive) {
-                        store.remove(instance)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(width: 30, height: 42)
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-        }
-        .foregroundStyle(selected ? Color.black : Color.primary)
-        .background(
-            selected ? theme.dock.accent : Color.primary.opacity(0.045),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(
-                    selected ? Color.black.opacity(0.10) : Color.primary.opacity(0.06),
-                    lineWidth: 0.8
-                )
         }
     }
 }
@@ -503,14 +130,13 @@ struct SurfaceThemePicker: View {
     let surface: ThemeSurface
 
     @ObservedObject private var theme = ThemeStore.shared
-    @State private var selectedForPairing: ThemePreset?
 
     private let presets =
         ThemePreset.macSpacesPresets + ThemePreset.terminalPresets
 
     var body: some View {
         SettingsCard("Theme", systemImage: "paintpalette") {
-            Text("Choose one palette for \(surface.title). Widget materials are selected on each widget.")
+            Text("Choose a palette for your Nook. Every widget shares one clean, modern style.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -539,32 +165,7 @@ struct SurfaceThemePicker: View {
                 }
             }
 
-            if let selectedForPairing,
-               theme.preset(for: surface.other) != selectedForPairing {
-                HStack(spacing: 8) {
-                    Image(systemName: "link")
-                        .font(.caption)
-                        .foregroundStyle(selectedForPairing.previewColor)
-                    Text("Match \(surface.other.title) to \(selectedForPairing.title)?")
-                        .font(.caption)
-                    Spacer()
-                    Button("Apply") {
-                        pair(selectedForPairing)
-                    }
-                    .buttonStyle(.borderless)
-                    Button {
-                        self.selectedForPairing = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(height: 24)
-            }
-
-            Divider()
-
+            DisclosureGroup("Fine-tune appearance") {
             SettingsSlider(
                 title: "Color intensity",
                 value: intensityBinding,
@@ -611,6 +212,8 @@ struct SurfaceThemePicker: View {
                     valueText: "\(Int(theme.dockCornerRadius)) pt"
                 )
             }
+            }
+
         }
     }
 
@@ -679,21 +282,6 @@ struct SurfaceThemePicker: View {
         withAnimation(Design.spring()) {
             theme.setPreset(preset, for: surface)
         }
-        selectedForPairing = preset
-    }
-
-    private func pair(_ preset: ThemePreset) {
-        withAnimation(Design.spring()) {
-            theme.setPreset(preset, for: surface.other)
-            if preset == .custom {
-                if surface == .notch {
-                    theme.customDockHex = theme.customNotchHex
-                } else {
-                    theme.customNotchHex = theme.customDockHex
-                }
-            }
-        }
-        selectedForPairing = nil
     }
 
     private var customSurfaceColor: Binding<Color> {
@@ -748,570 +336,12 @@ struct SurfaceThemePicker: View {
 
 private struct ThemeSettingsPane: View {
     @ObservedObject private var theme = ThemeStore.shared
-
     var body: some View {
-        SettingsPage(
-            title: "Appearance",
-            subtitle: "See every change live, start from a complete look, or shape every surface yourself."
-        ) {
-            ThemePreview()
-
-            SettingsCard("Presets", systemImage: "wand.and.stars") {
-                Text("Four complete starting points. Each sets color and widget geometry; customization remains fully editable below.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 9) {
-                    ForEach(QuickLook.allCases) { look in
-                        Button {
-                            withAnimation(Design.spring()) { look.apply(to: theme) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 9) {
-                                HStack {
-                                    Image(systemName: look.symbol)
-                                        .foregroundStyle(look.accent)
-                                    Spacer(minLength: 0)
-                                    if look.isActive(in: theme) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(look.accent)
-                                    }
-                                }
-
-                                Text(look.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .lineLimit(1)
-
-                                HStack(spacing: 4) {
-                                    ForEach(Array(look.swatches.enumerated()), id: \.offset) { _, color in
-                                        Capsule()
-                                            .fill(color)
-                                            .frame(maxWidth: .infinity)
-                                            .frame(height: 5)
-                                    }
-                                }
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-                            .background(
-                                look.isActive(in: theme)
-                                    ? look.accent.opacity(0.17)
-                                    : Color.primary.opacity(0.045),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                    .strokeBorder(
-                                        look.isActive(in: theme)
-                                            ? look.accent.opacity(0.52)
-                                            : Color.primary.opacity(0.08)
-                                    )
-                            }
-                        }
-                        .buttonStyle(PremiumPressButtonStyle())
-                    }
-                }
+        SettingsPage(title: "Theme", subtitle: "Make your Nook feel at home.") {
+            SurfaceThemePicker(surface: .notch)
+            SettingsCard("Motion", systemImage: "sparkles") {
+                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
             }
-
-            SettingsCard("Customization", systemImage: "slider.horizontal.3") {
-                customizationHeading(
-                    "Widget shape",
-                    detail: "Geometry changes without replacing your colors."
-                )
-
-                HStack(spacing: 8) {
-                    ForEach(WidgetVisualStyle.allCases) { style in
-                        Button {
-                            withAnimation(Design.spring()) {
-                                theme.widgetVisualStyle = style
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Image(systemName: style.symbol)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(theme.widgetVisualStyle == style ? theme.accent : .secondary)
-                                Text(style.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-                            .background {
-                                PremiumWidgetChrome(
-                                    tokens: theme.dock,
-                                    style: style,
-                                    isActive: theme.widgetVisualStyle == style
-                                )
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: style.chromeRadius, style: .continuous))
-                        }
-                        .buttonStyle(PremiumPressButtonStyle())
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Surface palettes",
-                    detail: "Keep Nook and Dock coordinated or mix any two palettes."
-                )
-
-                HStack(spacing: 10) {
-                    Menu {
-                        Section("MacSpaces") {
-                            ForEach(ThemePreset.macSpacesPresets) { preset in
-                                Button(preset.title) {
-                                    theme.applyCoordinatedPreset(preset)
-                                }
-                            }
-                        }
-                        Section("Terminal classics") {
-                            ForEach(ThemePreset.terminalPresets) { preset in
-                                Button(preset.title) {
-                                    theme.applyCoordinatedPreset(preset)
-                                }
-                            }
-                        }
-                    } label: {
-                        Label("Apply to both", systemImage: "link")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Picker("Nook", selection: $theme.notchPreset) {
-                        ForEach(ThemePreset.allCases) { Text($0.title).tag($0) }
-                    }
-
-                    Picker("Dock", selection: $theme.dockPreset) {
-                        ForEach(ThemePreset.allCases) { Text($0.title).tag($0) }
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Color",
-                    detail: "Choose a quick accent or enter exact colors for each surface."
-                )
-
-                HStack(spacing: 17) {
-                    ForEach(AccentChoice.allCases) { choice in
-                        Button {
-                            theme.accentChoice = choice
-                        } label: {
-                            Circle()
-                                .fill(choice == .custom ? (Color(themeHex: theme.customAccentHex) ?? .white) : choice.color)
-                                .frame(width: 22, height: 22)
-                                .overlay {
-                                    if theme.accentChoice == choice {
-                                        Circle().strokeBorder(.primary, lineWidth: 2)
-                                            .padding(-4)
-                                    }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .help(choice.title)
-                    }
-                }
-
-                HStack(alignment: .top, spacing: 12) {
-                    ExactColorField(
-                        "Accent",
-                        color: accentColor,
-                        hex: $theme.customAccentHex
-                    ) {
-                        theme.accentChoice = .custom
-                    }
-                    ExactColorField(
-                        "Nook",
-                        color: nookColor,
-                        hex: $theme.customNotchHex
-                    ) {
-                        theme.notchPreset = .custom
-                    }
-                    ExactColorField(
-                        "Dock",
-                        color: dockColor,
-                        hex: $theme.customDockHex
-                    ) {
-                        theme.dockPreset = .custom
-                    }
-                }
-
-                Divider()
-
-                customizationHeading(
-                    "Finish",
-                    detail: "Control depth, edges, density, and motion."
-                )
-
-                VStack(spacing: 10) {
-                    SettingsSlider(
-                        title: "Color intensity",
-                        value: $theme.themeIntensity,
-                        range: 0...1,
-                        valueText: "\(Int(theme.themeIntensity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Tile definition",
-                        value: $theme.tileContrast,
-                        range: 0...1,
-                        valueText: "\(Int(theme.tileContrast * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Ambient glow",
-                        value: $theme.glowStrength,
-                        range: 0...1,
-                        valueText: "\(Int(theme.glowStrength * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook edge",
-                        value: $theme.notchEdgeWidth,
-                        range: 0...4,
-                        valueText: String(format: "%.1f pt", theme.notchEdgeWidth)
-                    )
-                    SettingsSlider(
-                        title: "Edge contrast",
-                        value: $theme.notchEdgeStrength,
-                        range: 0...1,
-                        valueText: "\(Int(theme.notchEdgeStrength * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook opacity",
-                        value: $theme.notchOpacity,
-                        range: 0.84...1,
-                        valueText: "\(Int(theme.notchOpacity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Dock opacity",
-                        value: $theme.dockOpacity,
-                        range: 0.72...1,
-                        valueText: "\(Int(theme.dockOpacity * 100))%"
-                    )
-                    SettingsSlider(
-                        title: "Nook corners",
-                        value: $theme.notchCornerRadius,
-                        range: 14...34,
-                        valueText: "\(Int(theme.notchCornerRadius)) pt"
-                    )
-                    SettingsSlider(
-                        title: "Dock corners",
-                        value: $theme.dockCornerRadius,
-                        range: 14...34,
-                        valueText: "\(Int(theme.dockCornerRadius)) pt"
-                    )
-
-                    Divider()
-
-                    Toggle("Gradient surfaces", isOn: $theme.gradientSurfaces)
-                    Toggle("Compact controls", isOn: $theme.compactControls)
-                    Toggle("Reduce interface motion", isOn: $theme.reduceMotionPreference)
-                        .disabled(theme.systemReduceMotion)
-                    if theme.systemReduceMotion {
-                        Text("Already on because Reduce Motion is enabled in System Settings › Accessibility › Display.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Divider()
-
-                HStack {
-                    Text("Changes apply to the Nook and Dock immediately.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Restore Defaults") {
-                        theme.reset()
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private enum QuickLook: CaseIterable, Identifiable {
-        case midnightStudio, tidalGlass, tokyoTerminal, emberSoft
-
-        nonisolated var id: Self { self }
-
-        var title: String {
-            switch self {
-            case .midnightStudio: return "Midnight Studio"
-            case .tidalGlass: return "Tidal Glass"
-            case .tokyoTerminal: return "Tokyo Terminal"
-            case .emberSoft: return "Ember Soft"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .midnightStudio: return "moon.stars.fill"
-            case .tidalGlass: return "water.waves"
-            case .tokyoTerminal: return "terminal.fill"
-            case .emberSoft: return "sparkles"
-            }
-        }
-
-        var accent: Color {
-            switch self {
-            case .midnightStudio: return AccentChoice.blue.color
-            case .tidalGlass: return AccentChoice.cyan.color
-            case .tokyoTerminal: return Color(themeHex: "#7AA2F7") ?? AccentChoice.blue.color
-            case .emberSoft: return AccentChoice.orange.color
-            }
-        }
-
-        var swatches: [Color] {
-            switch self {
-            case .midnightStudio:
-                return [Color(themeHex: "#020714") ?? .black, Color(themeHex: "#0A2952") ?? .blue, accent]
-            case .tidalGlass:
-                return [Color(themeHex: "#021D2A") ?? .black, Color(themeHex: "#006B8F") ?? .cyan, accent]
-            case .tokyoTerminal:
-                return [Color(themeHex: "#1A1B26") ?? .black, Color(themeHex: "#24283B") ?? .gray, accent]
-            case .emberSoft:
-                return [Color(themeHex: "#240606") ?? .black, Color(themeHex: "#B82106") ?? .orange, accent]
-            }
-        }
-
-        func apply(to theme: ThemeStore) {
-            switch self {
-            case .midnightStudio:
-                theme.applyCoordinatedPreset(.midnight)
-                theme.widgetVisualStyle = .studio
-                theme.themeIntensity = 0.82
-                theme.tileContrast = 0.72
-                theme.glowStrength = 0.24
-                theme.gradientSurfaces = true
-            case .tidalGlass:
-                theme.applyCoordinatedPreset(.ocean)
-                theme.widgetVisualStyle = .glass
-                theme.themeIntensity = 0.72
-                theme.tileContrast = 0.56
-                theme.glowStrength = 0.34
-                theme.gradientSurfaces = true
-            case .tokyoTerminal:
-                theme.applyCoordinatedPreset(.tokyoNight)
-                theme.widgetVisualStyle = .terminal
-                theme.themeIntensity = 0.88
-                theme.tileContrast = 0.84
-                theme.glowStrength = 0.12
-                theme.gradientSurfaces = false
-            case .emberSoft:
-                theme.applyCoordinatedPreset(.sunset)
-                theme.widgetVisualStyle = .soft
-                theme.themeIntensity = 0.86
-                theme.tileContrast = 0.64
-                theme.glowStrength = 0.31
-                theme.gradientSurfaces = true
-            }
-        }
-
-        func isActive(in theme: ThemeStore) -> Bool {
-            switch self {
-            case .midnightStudio: return theme.notchPreset == .midnight && theme.dockPreset == .midnight && theme.widgetVisualStyle == .studio
-            case .tidalGlass: return theme.notchPreset == .ocean && theme.dockPreset == .ocean && theme.widgetVisualStyle == .glass
-            case .tokyoTerminal: return theme.notchPreset == .tokyoNight && theme.dockPreset == .tokyoNight && theme.widgetVisualStyle == .terminal
-            case .emberSoft: return theme.notchPreset == .sunset && theme.dockPreset == .sunset && theme.widgetVisualStyle == .soft
-            }
-        }
-    }
-
-    private var accentColor: Binding<Color> {
-        customColor(hex: theme.customAccentHex) {
-            theme.customAccentHex = $0
-            theme.accentChoice = .custom
-        }
-    }
-
-    private var nookColor: Binding<Color> {
-        customColor(hex: theme.customNotchHex) {
-            theme.customNotchHex = $0
-            theme.notchPreset = .custom
-        }
-    }
-
-    private var dockColor: Binding<Color> {
-        customColor(hex: theme.customDockHex) {
-            theme.customDockHex = $0
-            theme.dockPreset = .custom
-        }
-    }
-
-    private func customColor(hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
-        Binding(
-            get: { Color(themeHex: hex) ?? .black },
-            set: { set(NSColor($0).themeHexString) }
-        )
-    }
-
-    private func customizationHeading(_ title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct ExactColorField: View {
-    private let title: String
-    @Binding private var color: Color
-    @Binding private var hex: String
-    private let onCustom: () -> Void
-
-    @State private var draft: String
-
-    init(
-        _ title: String,
-        color: Binding<Color>,
-        hex: Binding<String>,
-        onCustom: @escaping () -> Void
-    ) {
-        self.title = title
-        self._color = color
-        self._hex = hex
-        self.onCustom = onCustom
-        self._draft = State(initialValue: hex.wrappedValue)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ColorPicker(title, selection: $color, supportsOpacity: false)
-                .font(.system(size: 11, weight: .medium))
-            TextField("#000000", text: $draft)
-                .font(.system(size: 10, design: .monospaced))
-                .textFieldStyle(.roundedBorder)
-                .onChange(of: draft) { newValue in
-                    // Only a user edit should switch the surface to its custom
-                    // color; programmatic hex changes arrive with draft already
-                    // synced below.
-                    guard newValue != hex else { return }
-                    hex = newValue
-                    onCustom()
-                }
-                .onChange(of: hex) { newValue in
-                    if draft != newValue { draft = newValue }
-                }
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity)
-        .background(
-            Color.primary.opacity(0.04),
-            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-        )
-    }
-}
-
-private struct ThemePreview: View {
-    @ObservedObject private var theme = ThemeStore.shared
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.08, green: 0.10, blue: 0.16),
-                    Color(red: 0.12, green: 0.18, blue: 0.25),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            VStack(spacing: 12) {
-                previewLabel("NOOK", value: theme.notchPreset.title)
-
-                HStack(spacing: 7) {
-                    previewTile("music.note", tokens: theme.notch, width: 104)
-                    previewTile("timer", tokens: theme.notch, width: 58)
-                    previewTile("calendar", tokens: theme.notch, width: 74)
-                }
-                .padding(9)
-                .frame(maxWidth: .infinity)
-                .background(
-                    theme.notch.surface,
-                    in: RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                )
-                .background(
-                    theme.notch.surfaceSecondary,
-                    in: RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: CGFloat(theme.notchCornerRadius), style: .continuous)
-                        .strokeBorder(theme.notch.border, lineWidth: max(1, theme.notchEdgeWidth))
-                }
-
-                HStack(spacing: 10) {
-                    previewLabel("DOCK", value: theme.dockPreset.title)
-                    Spacer()
-                    HStack(spacing: 6) {
-                        previewTile("clock.fill", tokens: theme.dock, width: 34)
-                        previewTile("bolt.fill", tokens: theme.dock, width: 34)
-                        previewTile("battery.100percent", tokens: theme.dock, width: 34)
-                    }
-                    .padding(6)
-                    .background(
-                        theme.dock.surface,
-                        in: RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                    )
-                    .background(
-                        theme.dock.surfaceSecondary,
-                        in: RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: CGFloat(theme.dockCornerRadius), style: .continuous)
-                            .strokeBorder(theme.dock.border)
-                    }
-                }
-            }
-            .padding(14)
-        }
-        .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12))
-        }
-    }
-
-    private func previewLabel(_ title: String, value: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 8, weight: .bold))
-                .tracking(0.8)
-            Text(value)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.white)
-    }
-
-    private func previewTile(
-        _ symbol: String,
-        tokens: ThemeTokens,
-        width: CGFloat
-    ) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(tokens.accent)
-            .frame(width: width, height: 34)
-            .background {
-                PremiumWidgetChrome(tokens: tokens, style: theme.widgetVisualStyle, isActive: false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: previewRadius, style: .continuous))
-    }
-
-    private var previewRadius: CGFloat {
-        switch theme.widgetVisualStyle {
-        case .studio: return 10
-        case .glass: return 12
-        case .terminal: return 5
-        case .soft: return 16
-        case .signal: return 8
-        case .orbit: return 17
-        case .mono: return 6
-        case .frame: return 7
         }
     }
 }
@@ -1332,13 +362,7 @@ private struct PermissionsSettingsPane: View {
                     status: cameraStatus,
                     settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
                 )
-                PermissionRow(
-                    title: "Microphone",
-                    detail: "Voice Memo widget",
-                    symbol: "mic",
-                    status: microphoneStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-                )
+
                 PermissionRow(
                     title: "Calendars",
                     detail: "Calendar and meeting widgets",
@@ -1353,36 +377,10 @@ private struct PermissionsSettingsPane: View {
                     status: eventStatus(.reminder),
                     settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"
                 )
-                PermissionRow(
-                    title: "Location",
-                    detail: "Local weather",
-                    symbol: "location",
-                    status: locationStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"
-                )
-                PermissionRow(
-                    title: "Accessibility",
-                    detail: "Window management, Dock app detection, and exact window focus",
-                    symbol: "accessibility",
-                    status: AXIsProcessTrusted() ? .granted : .notGranted,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                )
-                PermissionRow(
-                    title: "Screen Recording",
-                    detail: "Live thumbnails for OpenDock window previews",
-                    symbol: "record.circle",
-                    status: CGPreflightScreenCaptureAccess() ? .granted : .notGranted,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                )
-                PermissionRow(
-                    title: "System Audio",
-                    detail: "Per-app volume and live mixer levels",
-                    symbol: "waveform",
-                    status: AppServices.shared.audioMixer.isMixerRunning
-                        ? .granted
-                        : .review,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture"
-                )
+
+
+
+
                 PermissionRow(
                     title: "Media apps & browsers",
                     detail: "Now Playing metadata fallback",
@@ -1392,9 +390,13 @@ private struct PermissionsSettingsPane: View {
                 )
             }
 
+            SettingsCard("Weather", systemImage: "cloud.sun") {
+                PermissionRow(title: "Location", detail: "Local weather when the Weather widget is enabled", symbol: "location", status: locationStatus,
+                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+            }
             SettingsCard("Privacy", systemImage: "lock.shield") {
                 Label("Clipboard history, notes, profiles, and tray items stay on this Mac.", systemImage: "checkmark.shield")
-                Label("Network widgets contact only the service they display.", systemImage: "network")
+                Label("Weather, lyrics, and app updates use their respective online services.", systemImage: "network")
             }
         }
     }
@@ -1504,7 +506,7 @@ private struct AboutSettingsPane: View {
                 Text("Version \(version)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("One app. Two surfaces. Your Mac, arranged around the way you work.")
+                Text("Music, focus, files and everyday tools. One thoughtfully arranged Nook.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

@@ -12,6 +12,10 @@ enum NookWidgetKind: String, Codable, CaseIterable, Identifiable {
     case mirror
     case battery
     case clock
+    case weather
+    case clipboard
+    case pomodoro
+    case quickActions
 
     var id: String { rawValue }
 
@@ -26,6 +30,10 @@ enum NookWidgetKind: String, Codable, CaseIterable, Identifiable {
         case .mirror: return "Mirror"
         case .battery: return "Battery"
         case .clock: return "Clock"
+        case .weather: return "Weather"
+        case .clipboard: return "Clipboard"
+        case .pomodoro: return "Pomodoro"
+        case .quickActions: return "Quick Actions"
         }
     }
 
@@ -40,6 +48,10 @@ enum NookWidgetKind: String, Codable, CaseIterable, Identifiable {
         case .mirror: return "web.camera"
         case .battery: return "battery.100percent"
         case .clock: return "clock"
+        case .weather: return "cloud.sun"
+        case .clipboard: return "doc.on.clipboard"
+        case .pomodoro: return "timer.circle"
+        case .quickActions: return "bolt"
         }
     }
 
@@ -48,13 +60,15 @@ enum NookWidgetKind: String, Codable, CaseIterable, Identifiable {
         case .media: return 260
         case .calendar, .todos, .notes, .mirror: return 180
         case .shortcuts: return 150
-        case .timer, .battery, .clock: return 116
+        case .timer, .battery, .clock, .weather, .pomodoro: return 116
+        case .clipboard: return 180
+        case .quickActions: return 150
         }
     }
 
     var canUseCompactRow: Bool {
         switch self {
-        case .timer, .battery, .clock:
+        case .timer, .battery, .clock, .weather, .pomodoro:
             return true
         default:
             return false
@@ -74,6 +88,19 @@ struct NookLayoutItem: Identifiable {
 }
 
 extension Array where Element == NookWidgetKind {
+    /// Expand columns proportionally to occupy header-required space. Profiles
+    /// wider than the available area retain their natural widths and scroll.
+    func fittedNookWidths(availableWidth: CGFloat, spacing: CGFloat = 10) -> [NookWidgetKind: CGFloat] {
+        let columns = nookLayoutItems()
+        let naturalWidth = columns.reduce(CGFloat.zero) { $0 + $1.width }
+        guard naturalWidth > 0 else { return [:] }
+        let gaps = CGFloat(Swift.max(0, columns.count - 1)) * spacing
+        let scale = Swift.max(1, (availableWidth - gaps) / naturalWidth)
+        return Dictionary(uniqueKeysWithValues: columns.flatMap { column in
+            column.kinds.map { ($0, column.width * scale) }
+        })
+    }
+
     func nookLayoutItems() -> [NookLayoutItem] {
         var result: [NookLayoutItem] = []
         var index = startIndex
@@ -387,7 +414,7 @@ final class NookSettings: ObservableObject {
     }
 
     func widgetStyle(for kind: NookWidgetKind) -> WidgetVisualStyle {
-        activeProfile.widgetStyles?[kind.rawValue] ?? .studio
+        .studio
     }
 
     func setWidgetStyle(_ style: WidgetVisualStyle, for kind: NookWidgetKind) {
@@ -395,7 +422,7 @@ final class NookSettings: ObservableObject {
             return
         }
         var styles = profiles[index].widgetStyles ?? [:]
-        styles[kind.rawValue] = style
+        styles[kind.rawValue] = .studio
         profiles[index].widgetStyles = styles
     }
 

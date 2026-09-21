@@ -115,9 +115,10 @@ struct NotchContainerView: View {
             if !isExpanded { viewModel.expand() }
         }
         .onDrop(of: [UTType.fileURL], delegate: NotchDropDelegate(viewModel: viewModel))
-        .animation(.easeOut(duration: 0.18), value: isExpanded)
+        .animation(theme.reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: isExpanded)
         .environment(\.colorScheme, theme.notch.colorScheme)
         .tint(theme.notch.accent)
+        .foregroundStyle(theme.notchPreset == .forest ? (Color(themeHex: "#D3C6AA") ?? .primary) : .primary)
     }
 
     // MARK: - Collapsed
@@ -263,7 +264,7 @@ struct NotchContainerView: View {
         // Notched hardware reports a menu-bar-height safe top area. Header
         // controls are placed in the usable shoulders around it instead of
         // leaving a full empty band above Nook/Tray.
-        let topInset: CGFloat = viewModel.geometry.isHardwareNotch ? 9 : 8
+        let topInset = viewModel.expandedHeaderTopInset
         let horizontalInset: CGFloat = 20
         let bottomInset: CGFloat = 18
 

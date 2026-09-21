@@ -19,14 +19,13 @@ struct NotchHeaderView: View {
 
             HStack(spacing: 2) {
                 if viewModel.selectedTab == .nook {
-                    if !viewModel.settings.widgets.isEmpty {
-                        AddNookWidgetMenu(settings: viewModel.settings)
-                    }
+                    AddNookWidgetMenu(settings: viewModel.settings)
+                        .fixedSize()
 
                     Menu {
                         SurfacePaletteMenuContent(surface: .notch) {
                             viewModel.collapse()
-                            SettingsWindowController.shared.show(.notch)
+                            SettingsWindowController.shared.show(.theme)
                         }
                     } label: {
                         Image(systemName: "paintpalette")
@@ -37,7 +36,7 @@ struct NotchHeaderView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("Change OpenNotch Palette")
+                    .help("Change Nook Theme")
 
                     Button {
                         withAnimation(Design.spring()) {
@@ -89,6 +88,7 @@ struct NotchHeaderView: View {
                 .buttonStyle(.plain)
                 .help("Close Nook")
             }
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(.secondary)
             .background(Color.white.opacity(0.075), in: Capsule())
         }

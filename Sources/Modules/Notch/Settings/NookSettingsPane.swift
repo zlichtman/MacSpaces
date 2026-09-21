@@ -8,12 +8,12 @@ struct NookSettingsPane: View {
 
     var body: some View {
         SettingsPage(
-            title: "OpenNotch",
-            subtitle: "Everything for the notch surface, in one place."
+            title: "Nook",
+            subtitle: "Choose your widgets, then make the Nook fit your day."
         ) {
-            SettingsCard("OpenNotch", systemImage: "power") {
+            SettingsCard("Nook", systemImage: "power") {
                 HStack {
-                    Toggle("Enable OpenNotch", isOn: $app.notchEnabled)
+                    Toggle("Enable Nook", isOn: $app.notchEnabled)
                     Spacer(minLength: 16)
                     Button("Reset…") {
                         showingResetConfirmation = true
@@ -26,7 +26,20 @@ struct NookSettingsPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            SurfaceThemePicker(surface: .notch)
+            SurfaceWidgetEditor(
+                surface: .notch,
+                items: settings.widgets.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
+                choices: NookWidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
+                toggle: { raw in
+                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
+                    settings.setEnabled(!settings.widgets.contains(kind), for: kind)
+                },
+                remove: { raw in
+                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
+                    settings.setEnabled(false, for: kind)
+                },
+                reorder: { settings.setWidgetOrder($0.compactMap(NookWidgetKind.init(rawValue:))) }
+            )
 
             SettingsCard("Profile", systemImage: "rectangle.3.group") {
                 HStack {
@@ -70,35 +83,7 @@ struct NookSettingsPane: View {
                 }
             }
 
-            SettingsCard("Widgets", systemImage: "square.grid.2x2") {
-                HStack {
-                    Text("\(settings.widgets.count) selected")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Clear") {
-                        settings.widgets = []
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(settings.widgets.isEmpty)
-                }
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 145), spacing: 8)],
-                    spacing: 8
-                ) {
-                    ForEach(NookWidgetKind.allCases) { kind in
-                        nookWidgetCard(kind)
-                    }
-                }
-
-                Text("Select a card to add or remove it. Drag widgets directly in OpenNotch to reorder them; each widget uses its designed default size.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SettingsCard("Size & edge", systemImage: "arrow.up.left.and.arrow.down.right") {
+            SettingsCard("Size", systemImage: "arrow.up.left.and.arrow.down.right") {
                 HStack(spacing: 10) {
                     Image(systemName: "macbook.gen2")
                         .foregroundStyle(theme.accent)
@@ -123,18 +108,7 @@ struct NookSettingsPane: View {
                     range: 210...420,
                     valueText: "\(Int(settings.expandedHeight)) pt"
                 )
-                SettingsSlider(
-                    title: "Edge width",
-                    value: $theme.notchEdgeWidth,
-                    range: 0.5...3,
-                    valueText: String(format: "%.1f pt", theme.notchEdgeWidth)
-                )
-                SettingsSlider(
-                    title: "Edge strength",
-                    value: $theme.notchEdgeStrength,
-                    range: 0...1,
-                    valueText: "\(Int(theme.notchEdgeStrength * 100))%"
-                )
+
             }
 
             SettingsCard("Open & close", systemImage: "cursorarrow.motionlines") {
@@ -200,7 +174,7 @@ struct NookSettingsPane: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .alert("Reset OpenNotch?", isPresented: $showingResetConfirmation) {
+        .alert("Reset Nook?", isPresented: $showingResetConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
                 settings.resetToDefaults()
@@ -208,74 +182,8 @@ struct NookSettingsPane: View {
                 app.notchEnabled = true
             }
         } message: {
-            Text("This removes OpenNotch profiles and widgets, then restores its theme, size, displays, activities, and behavior defaults.")
+            Text("This removes Nook profiles and widgets, then restores its theme, size, displays, activities, and behavior defaults.")
         }
     }
 
-    private func nookWidgetCard(_ kind: NookWidgetKind) -> some View {
-        let selected = settings.widgets.contains(kind)
-        return HStack(spacing: 0) {
-            Button {
-                settings.setEnabled(!selected, for: kind)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: kind.systemImage)
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 20)
-                    Text(kind.title)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(
-                            selected
-                                ? Color.black.opacity(0.72)
-                                : Color.primary.opacity(0.24)
-                        )
-                }
-                .padding(.leading, 10)
-                .padding(.trailing, selected ? 4 : 10)
-                .frame(maxWidth: .infinity, minHeight: 42)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if selected {
-                Menu {
-                    Section("Look") {
-                        ForEach(WidgetVisualStyle.styles(for: kind)) { style in
-                            Button {
-                                settings.setWidgetStyle(style, for: kind)
-                            } label: {
-                                Label(style.title, systemImage: style.symbol)
-                            }
-                        }
-                    }
-                    Divider()
-                    Button("Remove \(kind.title)", role: .destructive) {
-                        settings.setEnabled(false, for: kind)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(width: 30, height: 42)
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-        }
-        .foregroundStyle(selected ? Color.black : Color.primary)
-        .background(
-            selected ? theme.notch.accent : Color.primary.opacity(0.045),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(
-                    selected ? Color.black.opacity(0.10) : Color.primary.opacity(0.06),
-                    lineWidth: 0.8
-                )
-        }
-    }
 }

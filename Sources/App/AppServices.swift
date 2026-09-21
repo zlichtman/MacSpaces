@@ -11,26 +11,24 @@ final class AppServices {
     let nowPlaying = NowPlayingController()
     let powerMonitor = PowerSourceMonitor()
     let timerService = TimerService()
-    let clipboard = ClipboardMonitor()
-    let systemStats = SystemStatsService()
-    let weather = WeatherService()
+    lazy var clipboard = ClipboardMonitor()
+    lazy var systemStats = SystemStatsService()
+    lazy var weather = WeatherService()
     let calendar = CalendarService()
-    let crypto = CryptoService()
+    lazy var crypto = CryptoService()
     let shortcuts = ShortcutsService()
     let bluetooth = BluetoothMonitor()
     let systemActivity = SystemActivityMonitor()
-    let audioMixer = AudioMixerService()
+    lazy var audioMixer = AudioMixerService()
     lazy var teleprompter = TeleprompterService(nowPlaying: nowPlaying)
 
     private init() {}
 
     func reconcileDemand(
         app: AppSettings,
-        nook: NookSettings,
-        dock: DockStore
+        nook: NookSettings
     ) {
         let nookWidgets = nook.widgets
-        let dockWidgets = dock.widgets.map(\.kind)
 
         let needsTeleprompter = app.notchEnabled && nook.showTeleprompterBar
 
@@ -40,7 +38,6 @@ final class AppServices {
         let needsNowPlaying =
             app.notchEnabled &&
                 (nook.showMusicLiveActivity || nookWidgets.contains(.media))
-            || app.dockEnabled && dockWidgets.contains(.nowPlaying)
             || needsTeleprompter
         needsNowPlaying ? nowPlaying.start() : nowPlaying.stop()
 
@@ -62,30 +59,19 @@ final class AppServices {
 
         needsTeleprompter ? teleprompter.start() : teleprompter.stop()
 
-        let needsClipboard = app.dockEnabled && dockWidgets.contains(.clipboard)
-        needsClipboard ? clipboard.start() : clipboard.stop()
-
-        let needsSystemStats = app.dockEnabled && dockWidgets.contains(.systemStats)
-        needsSystemStats ? systemStats.start() : systemStats.stop()
-
-        let needsAudioMixer = app.dockEnabled && dockWidgets.contains(.audio)
-        needsAudioMixer ? audioMixer.start() : audioMixer.stop()
-
-        let needsWeather = app.dockEnabled && dockWidgets.contains(.weather)
+        let needsWeather = app.notchEnabled && nookWidgets.contains(.weather)
         needsWeather ? weather.startIfNeeded() : weather.stop()
-
-        let needsCrypto = app.dockEnabled && dockWidgets.contains(.crypto)
-        needsCrypto ? crypto.startIfNeeded() : crypto.stop()
+        let needsClipboard = app.notchEnabled && nookWidgets.contains(.clipboard)
+        needsClipboard ? clipboard.start() : clipboard.stop()
 
         let needsEvents =
             app.notchEnabled && nookWidgets.contains(.calendar)
-            || app.dockEnabled &&
-                (dockWidgets.contains(.calendar) || dockWidgets.contains(.zoomMeetings))
+
         needsEvents ? calendar.startEventsIfNeeded() : calendar.stopEvents()
 
         let needsReminders =
             app.notchEnabled && nookWidgets.contains(.todos)
-            || app.dockEnabled && dockWidgets.contains(.reminders)
+
         needsReminders ? calendar.startRemindersIfNeeded() : calendar.stopReminders()
     }
 }
