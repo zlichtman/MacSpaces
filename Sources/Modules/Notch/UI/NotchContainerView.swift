@@ -115,9 +115,10 @@ struct NotchContainerView: View {
             if !isExpanded { viewModel.expand() }
         }
         .onDrop(of: [UTType.fileURL], delegate: NotchDropDelegate(viewModel: viewModel))
-        .animation(.easeOut(duration: 0.18), value: isExpanded)
+        .animation(theme.reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: isExpanded)
         .environment(\.colorScheme, theme.notch.colorScheme)
         .tint(theme.notch.accent)
+        .foregroundStyle(theme.notchPreset == .forest ? (Color(themeHex: "#D3C6AA") ?? .primary) : .primary)
     }
 
     // MARK: - Collapsed

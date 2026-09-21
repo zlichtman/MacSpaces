@@ -25,7 +25,7 @@ struct NotchHeaderView: View {
                     Menu {
                         SurfacePaletteMenuContent(surface: .notch) {
                             viewModel.collapse()
-                            SettingsWindowController.shared.show(.notch)
+                            SettingsWindowController.shared.show(.theme)
                         }
                     } label: {
                         Image(systemName: "paintpalette")
@@ -36,7 +36,7 @@ struct NotchHeaderView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("Change OpenNotch Palette")
+                    .help("Change Nook Theme")
 
                     Button {
                         withAnimation(Design.spring()) {

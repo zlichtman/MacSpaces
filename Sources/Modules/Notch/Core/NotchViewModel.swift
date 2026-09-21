@@ -42,6 +42,7 @@ final class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .collapsed
     @Published var selectedTab: NotchTab = .nook
     @Published var isDropTargeted = false
+    var isWeatherDetailsPresented = false
 
     let geometry: NotchGeometry
     let settings: NookSettings
@@ -228,7 +229,7 @@ final class NotchViewModel: ObservableObject {
             // Leaving the window is expected while rearranging a card or
             // dragging a file. Keep polling until that interaction ends.
             guard !self.settings.isInteractiveReorderActive,
-                  !self.isDropTargeted else {
+                  !self.isDropTargeted, !self.isWeatherDetailsPresented else {
                 self.scheduleCollapseCheck(after: 0.14)
                 return
             }

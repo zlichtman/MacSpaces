@@ -35,7 +35,7 @@ struct SurfaceWidgetEditor: View {
                     HStack {
                         Label("Nook", systemImage: "rectangle.grid.1x2.fill")
                         Spacer()
-                        Image(systemName: "plus")
+                        Button { showingLibrary = true } label: { Image(systemName: "plus") }.buttonStyle(.plain).help("Add widget")
                     }
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(tokens.accent)

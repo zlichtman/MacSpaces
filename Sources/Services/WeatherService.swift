@@ -58,6 +58,15 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         return URLSession(configuration: configuration)
     }()
 
+#if DEBUG
+    func setPreviewSnapshot(_ value: WeatherSnapshot) {
+        stop()
+        snapshot = value
+        errorText = nil
+        started = true
+    }
+#endif
+
     /// Called lazily by the weather widget so location permission is only
     /// requested when the widget is actually used.
     func startIfNeeded() {

@@ -2,157 +2,100 @@
 import SwiftUI
 import AppKit
 
-/// Fresh website captures of native views. Run only in the isolated demo bundle.
+/// Captures native Nook views using isolated preferences and synthetic content.
 @MainActor
 enum WebsiteDemoCapture {
     static func captureIfRequested() -> Bool {
         guard ProcessInfo.processInfo.environment["MACSPACES_WEBSITE_DEMO"] == "1" else { return false }
         precondition(Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces.WebsiteDemo")
-        let environment = ProcessInfo.processInfo.environment
-        let output = URL(fileURLWithPath: environment["MACSPACES_DEMO_OUTPUT"] ?? "/private/tmp/macspaces-gallery-native")
-        let artworkPath = environment["MACSPACES_DEMO_ARTWORK"] ?? "/private/tmp/macspaces-phantogram.jpg"
+        let env = ProcessInfo.processInfo.environment
+        let output = URL(fileURLWithPath: env["MACSPACES_DEMO_OUTPUT"] ?? "/private/tmp/macspaces-nook-demo")
         try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         InteractionRegressionChecks.run()
-        AppleDockPlacement.shared.setPreviewEdge(.left)
-        let theme = ThemeStore.shared
-        theme.reset()
-        let services = AppServices.shared
-        var track = NowPlayingInfo()
-        track.title = "Mouthful of Diamonds"
-        track.artist = "Phantogram"
-        track.album = "Eyelid Movies"
-        track.isPlaying = true
-        track.duration = 253.427
-        track.elapsed = 74
-        track.artwork = NSImage(contentsOfFile: artworkPath)!
-        services.nowPlaying.setPreviewInfo(track)
         let settings = NookSettings.shared
+        let services = AppServices.shared
+        let theme = ThemeStore.shared
         settings.showTeleprompterBar = false
         settings.showMusicLiveActivity = true
         settings.showTimerLiveActivity = false
         settings.showBluetoothLiveActivity = false
         settings.showPowerLiveActivity = false
-        settings.expandedWidth = 720
-        settings.expandedHeight = 246
+        settings.expandedWidth = 860
+        settings.expandedHeight = 270
         settings.fitWidthToProfile = true
+        services.weather.setPreviewSnapshot(WeatherSnapshot(temperature: 22, weatherCode: 2, high: 25, low: 17))
+        services.clipboard.setPreviewEntries(["Meet at the lake at 5:30", "A small space for a clear head."])
+        UserDefaults.standard.set("Today\nFinish the first draft\nTake a walk by the lake", forKey: "quickNote")
         let timer = TimerService(previewRemaining: 18 * 60 + 19, total: 25 * 60)
         let shelf = ShelfStore()
-        let sampleDirectory = output.appendingPathComponent("Demo files")
-        try! FileManager.default.createDirectory(at: sampleDirectory, withIntermediateDirectories: true)
-        let notes = sampleDirectory.appendingPathComponent("Project notes.md")
-        try! "# Project notes\nA focused desktop, your way.\n".write(to: notes, atomically: true, encoding: .utf8)
-        let artwork = sampleDirectory.appendingPathComponent("Cover.jpg")
-        try? FileManager.default.removeItem(at: artwork)
-        try! FileManager.default.copyItem(atPath: artworkPath, toPath: artwork.path)
-        shelf.setPreviewItems([notes, artwork], selectedIndex: 0)
-        func model(hardware: Bool = false, availableWidth: CGFloat = 1440) -> NotchViewModel {
+        let files = output.appendingPathComponent("Demo files")
+        try! FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+        let notes = files.appendingPathComponent("Weekend plans.md")
+        try! "# Weekend plans\nCoffee, a walk, and a new playlist.\n".write(to: notes, atomically: true, encoding: .utf8)
+        let brief = files.appendingPathComponent("Project brief.txt")
+        try! "Make room for a little focus.\n".write(to: brief, atomically: true, encoding: .utf8)
+        shelf.setPreviewItems([notes, brief], selectedIndex: 0)
+        func profile(_ kinds: [NookWidgetKind]) {
+            let p = NookProfile(id: UUID(), name: "Everyday", widgets: kinds)
+            settings.profiles = [p]; settings.activeProfileID = p.id
+        }
+        func model(hardware: Bool = true, availableWidth: CGFloat = 1440) -> NotchViewModel {
             NotchViewModel(geometry: hardware ? NotchGeometry(width: 185, height: 32, isHardwareNotch: true) : .synthetic,
-                availableWidth: availableWidth, settings: settings, shelf: shelf,
-                nowPlaying: services.nowPlaying, powerMonitor: services.powerMonitor, timerService: timer,
-                bluetoothMonitor: services.bluetooth, systemActivityMonitor: services.systemActivity, teleprompter: services.teleprompter)
+                availableWidth: availableWidth, settings: settings, shelf: shelf, nowPlaying: services.nowPlaying,
+                powerMonitor: services.powerMonitor, timerService: timer, bluetoothMonitor: services.bluetooth,
+                systemActivityMonitor: services.systemActivity, teleprompter: services.teleprompter)
         }
-        func profile(_ widgets: [NookWidgetKind], style: WidgetVisualStyle = .studio) {
-            let p = NookProfile(id: UUID(), name: "Demo", widgets: widgets,
-                widgetWidths: [NookWidgetKind.media.rawValue: 280, NookWidgetKind.timer.rawValue: 126, NookWidgetKind.clock.rawValue: 126],
-                widgetStyles: Dictionary(uniqueKeysWithValues: widgets.map { ($0.rawValue, style) }))
-            settings.profiles = [p]
-            settings.activeProfileID = p.id
-        }
-        let dock = DockStore.shared
-        dock.beginInteractiveReorder()
-        dock.tileSize = 110
-        dock.position = .bottom
-        func dockProfile(_ kinds: [WidgetKind], style: WidgetVisualStyle = .studio) {
-            dock.widgets = kinds.map { WidgetInstance(kind: $0, visualStyle: style, sizeMode: .full) }
-        }
-        func dockSize() -> CGSize {
-            let items = dock.widgets.dockLayoutItems(vertical: false)
-            let width = items.reduce(CGFloat(14)) { $0 + $1.axisLength(tile: CGFloat(dock.tileSize), spacing: 6) } + CGFloat(max(0, items.count - 1)) * 6
-            return CGSize(width: width, height: CGFloat(dock.tileSize) + 14)
-        }
-        func palette(_ name: String) {
-            theme.reset()
-            if name == "gold" {
-                theme.customNotchHex = "#211A11"
-                theme.customDockHex = "#211A11"
-                theme.customAccentHex = "#D6AF63"
-                theme.accentChoice = .custom
-                theme.applyCoordinatedPreset(.custom)
-                theme.notchThemeIntensity = 0.55
-                theme.dockThemeIntensity = 0.55
-            } else if name == "everforest" {
-                theme.customNotchHex = "#2D353B"
-                theme.customDockHex = "#2D353B"
-                theme.customAccentHex = "#A7C080"
-                theme.accentChoice = .custom
-                theme.applyCoordinatedPreset(.custom)
-            } else {
-                theme.applyCoordinatedPreset(name == "sunset" ? .sunset : .midnight)
+        func camera<V: View>(_ view: V) -> some View {
+            view.overlay(alignment: .top) {
+                UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
             }
         }
-        func song(_ index: Int) {
-            var info = NowPlayingInfo()
-            let songs = [("Mouthful of Diamonds", "Phantogram", "Eyelid Movies", artworkPath),
-                         ("I Melt With You", "Modern English", "Pillow Lips", "/private/tmp/macspaces-pillow-lips.jpg"),
-                         ("White Dress", "Lana Del Rey", "Chemtrails Over the Country Club", "/private/tmp/macspaces-lana.jpg")]
-            let selected = songs[index]
-            info.title = selected.0; info.artist = selected.1; info.album = selected.2
-            info.isPlaying = true; info.duration = index == 2 ? 333 : 253; info.elapsed = 74
-            info.artwork = NSImage(contentsOfFile: selected.3)!
-            services.nowPlaying.setPreviewInfo(info)
-        }
-        func sideDockSize() -> CGSize {
-            let height = dock.widgets.reduce(CGFloat(14)) { $0 + $1.kind.axisLength(tile: CGFloat(dock.tileSize), spacing: 6) }
-                + CGFloat(max(0, dock.widgets.count - 1)) * 6
-            return CGSize(width: dock.sideDockWidth + 14, height: height)
-        }
-        UserDefaults.standard.set(["#D6AF63", "#A7C080", "#73A4D5", "#D3B9D7"], forKey: "colorPickerHistory")
-        dock.position = .right
         for (index, name) in ["gold", "midnight", "everforest"].enumerated() {
-            song(index); palette(name)
-            profile(index == 1 ? [.clock, .media, .timer] : [.media, .timer, .clock])
-            dock.sideDockWidth = 154
-            dockProfile(index == 0 ? [.clock, .quickActions, .drinkWater] : index == 1 ? [.pomodoro, .colorPicker, .quickActions] : [.progress, .clock, .drinkWater])
-            let overview = model(hardware: true); overview.state = .expanded
-            let size = sideDockSize()
-            render(ZStack(alignment: .top) {
-                NotchContainerView(viewModel: overview).overlay(alignment: .top) {
-                    UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
-                }.frame(width: 700, height: 254)
-                HStack { Spacer(); DockContainerView(store: dock).frame(width: size.width, height: size.height).padding(.trailing, 12) }
-                    .frame(height: 650, alignment: .bottom).padding(.top, 20)
-            }.frame(width: 1080, height: 680), size: CGSize(width: 1080, height: 680), to: output.appendingPathComponent("desktop-\(name).png"))
-            // Each detail composition is independent of the overview.
-            profile(index == 0 ? [.media, .clock, .timer] : index == 1 ? [.timer, .media, .clock] : [.clock, .timer, .media])
-            let nook = model(); nook.state = .expanded
-            render(NotchContainerView(viewModel: nook).frame(width: 620, height: 260).frame(width: 680, height: 340),
-                   size: CGSize(width: 680, height: 340), to: output.appendingPathComponent("nook-\(name).png"))
-            dock.sideDockWidth = 220
-            dockProfile(index == 0 ? [.nowPlaying, .clock, .quickActions, .drinkWater] : index == 1 ? [.clock, .nowPlaying, .colorPicker, .pomodoro] : [.nowPlaying, .pomodoro, .drinkWater, .quickActions])
-            let detailSize = sideDockSize()
-            render(DockContainerView(store: dock).frame(width: detailSize.width, height: detailSize.height)
-                .frame(width: 280, height: 640), size: CGSize(width: 280, height: 640),
-                to: output.appendingPathComponent("column-\(name).png"))
+            theme.reset()
+            if name == "gold" {
+                theme.customNotchHex = "#211A11"; theme.customAccentHex = "#D6AF63"
+                theme.accentChoice = .custom; theme.setPreset(.custom, for: .notch)
+                theme.notchThemeIntensity = 0.55
+            } else { theme.setPreset(index == 1 ? .midnight : .forest, for: .notch) }
+            var info = NowPlayingInfo()
+            info.title = index == 0 ? "Mouthful of Diamonds" : index == 1 ? "I Melt With You" : "White Dress"
+            info.artist = index == 0 ? "Phantogram" : index == 1 ? "Modern English" : "Lana Del Rey"
+            info.album = index == 0 ? "Eyelid Movies" : index == 1 ? "Pillow Lips" : "Chemtrails Over the Country Club"
+            info.isPlaying = true; info.elapsed = 74; info.duration = 253
+            info.artwork = NSImage(contentsOfFile: index == 0 ? "/private/tmp/macspaces-phantogram.jpg" : index == 1 ? "/private/tmp/macspaces-pillow-lips.jpg" : "/private/tmp/macspaces-lana.jpg")!
+            services.nowPlaying.setPreviewInfo(info)
+            profile([.media, .weather, .clock, .notes])
+            let overview = model(); overview.state = .expanded
+            render(camera(NotchContainerView(viewModel: overview)).frame(width: 1000, height: 620, alignment: .top),
+                   size: CGSize(width: 1000, height: 620), to: output.appendingPathComponent("laptop-\(name).png"))
+            overview.state = .collapsed
+            render(camera(NotchContainerView(viewModel: overview)).frame(width: 1000, height: 620, alignment: .top),
+                   size: CGSize(width: 1000, height: 620), to: output.appendingPathComponent("closed-\(name).png"))
+            profile(index == 0 ? [.media, .weather, .clock, .clipboard] : [.media, .pomodoro, .clock, .quickActions])
+            let detail = model(); detail.state = .expanded
+            render(camera(NotchContainerView(viewModel: detail)).frame(width: 800, height: 330, alignment: .top),
+                   size: CGSize(width: 800, height: 330), to: output.appendingPathComponent("nook-\(name).png"))
+            profile([.media, .weather, .clock])
+            let tray = model(); tray.state = .expanded; tray.selectedTab = .tray
+            render(camera(NotchContainerView(viewModel: tray)).frame(width: 800, height: 330, alignment: .top),
+                   size: CGSize(width: 800, height: 330), to: output.appendingPathComponent("tray-\(name).png"))
         }
-        for destination in [SettingsDestination.notch, .dock, .theme] {
+        for destination in [SettingsDestination.notch, .theme, .permissions] {
             SettingsNavigationModel.shared.selection = destination
-            render(SettingsView().frame(width: 980, height: 760), size: CGSize(width: 980, height: 760), to: output.appendingPathComponent("settings-\(destination.rawValue).png"))
+            render(SettingsView().frame(width: 980, height: 760), size: CGSize(width: 980, height: 760),
+                   to: output.appendingPathComponent("settings-\(destination.rawValue).png"))
         }
-        // Regression captures: a physical camera overlay exposes controls hidden behind it.
-        settings.fitWidthToProfile = true
-        settings.expandedWidth = 480
-        for (name, widgets) in [("empty", [NookWidgetKind]()), ("one", [.timer]), ("pair", [.timer, .clock])] {
-            profile(widgets)
-            let nook = model(hardware: true); nook.state = .expanded
-            precondition(nook.expandedSize.width >= 185 + 440)
+        for (name, kinds) in [("empty", [NookWidgetKind]()), ("one", [.weather]), ("pair", [.timer, .clock])] {
+            profile(kinds)
+            let nook = model(); nook.state = .expanded
+            precondition(nook.expandedSize.width >= 625)
             precondition(nook.expandedHeaderTopInset == 9)
-            render(NotchContainerView(viewModel: nook).overlay(alignment: .top) {
-                UnevenRoundedRectangle(bottomLeadingRadius: 8, bottomTrailingRadius: 8).fill(.black).frame(width: 185, height: 32)
-            }.frame(width: 700, height: 280), size: CGSize(width: 700, height: 280), to: output.appendingPathComponent("regression-\(name).png"))
-            let constrained = model(hardware: true, availableWidth: 520)
-            precondition(constrained.expandedHeaderTopInset >= 32 + 8)
+            let constrained = model(availableWidth: 520)
+            precondition(constrained.expandedHeaderTopInset >= 40)
+            render(camera(NotchContainerView(viewModel: nook)).frame(width: 740, height: 340),
+                   size: CGSize(width: 740, height: 340), to: output.appendingPathComponent("regression-\(name).png"))
         }
-        print("Website captures and notch layout checks complete: \(output.path)")
+        print("Nook-only native captures and layout checks passed: \(output.path)")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
         return true
     }
@@ -161,11 +104,8 @@ enum WebsiteDemoCapture {
         host.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.contentView = host
-        host.layoutSubtreeIfNeeded()
-        host.displayIfNeeded()
+        window.isOpaque = false; window.backgroundColor = .clear; window.contentView = host
+        host.layoutSubtreeIfNeeded(); host.displayIfNeeded()
         let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
         host.cacheDisplay(in: host.bounds, to: bitmap)
         try! bitmap.representation(using: .png, properties: [:])!.write(to: url)

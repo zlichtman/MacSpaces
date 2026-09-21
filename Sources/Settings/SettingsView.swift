@@ -8,7 +8,6 @@ import UserNotifications
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
     case notch
-    case dock
     case theme
     case permissions
     case about
@@ -17,8 +16,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .notch: return "OpenNotch"
-        case .dock: return "OpenDock"
+        case .notch: return "Nook"
         case .theme: return "Theme"
         case .permissions: return "Permissions"
         case .about: return "About"
@@ -28,7 +26,6 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .notch: return "macbook.gen2"
-        case .dock: return "dock.rectangle"
         case .theme: return "paintpalette"
         case .permissions: return "hand.raised"
         case .about: return "info.circle"
@@ -122,7 +119,6 @@ struct SettingsView: View {
     private var detail: some View {
         switch navigation.selection {
         case .notch: NookSettingsPane()
-        case .dock: DockSettingsPane()
         case .theme: ThemeSettingsPane()
         case .permissions: PermissionsSettingsPane()
         case .about: AboutSettingsPane()
@@ -130,309 +126,17 @@ struct SettingsView: View {
     }
 }
 
-private struct DockSettingsPane: View {
-    @ObservedObject private var app = AppSettings.shared
-    @ObservedObject private var store = DockStore.shared
-    @ObservedObject private var theme = ThemeStore.shared
-    @ObservedObject private var appleDock = AppleDockPlacement.shared
-    @ObservedObject private var audioMixer = AppServices.shared.audioMixer
-    @State private var showingAudioMixer = false
-    @State private var showingResetConfirmation = false
-
-    var body: some View {
-        SettingsPage(
-            title: "OpenDock",
-            subtitle: "Everything for the dock surface, in one place."
-        ) {
-            SettingsCard("OpenDock", systemImage: "power") {
-                HStack {
-                    Toggle("Enable OpenDock", isOn: $app.dockEnabled)
-                    Spacer(minLength: 16)
-                    Button("Reset…") {
-                        showingResetConfirmation = true
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                }
-                Text("Places a configurable widget strip at your chosen screen edge.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            SurfaceWidgetEditor(
-                surface: .dock,
-                items: store.widgets.map { WidgetEditorItem(id: $0.id.uuidString, kind: $0.kind.rawValue, title: $0.kind.title, symbol: $0.kind.systemImage) },
-                choices: WidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
-                toggle: { raw in
-                    guard let kind = WidgetKind(rawValue: raw) else { return }
-                    if store.widgets.contains(where: { $0.kind == kind }) {
-                        store.widgets.removeAll { $0.kind == kind }
-                    } else { store.add(kind) }
-                },
-                remove: { id in store.widgets.removeAll { $0.id.uuidString == id } },
-                reorder: { ids in
-                    let current = Dictionary(uniqueKeysWithValues: store.widgets.map { ($0.id.uuidString, $0) })
-                    store.setWidgetOrder(ids.compactMap { current[$0] })
-                }
-            )
-
-            SettingsCard("Window previews", systemImage: "rectangle.on.rectangle") {
-                Toggle(
-                    "Show live windows when hovering over apps in Apple’s Dock",
-                    isOn: $store.windowPreviewsEnabled
-                )
-                .onChange(of: store.windowPreviewsEnabled) { enabled in
-                    guard enabled else { return }
-                    requestWindowPreviewPermissions()
-                }
-
-                Text("Hover a running app to see every open, minimized, and hidden window. Select one to bring that exact window forward. The App Switcher widget uses the same browser.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if store.windowPreviewsEnabled {
-                    HStack(spacing: 8) {
-                        previewPermissionBadge(
-                            title: "Accessibility",
-                            granted: AXIsProcessTrusted(),
-                            symbol: "accessibility",
-                            settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                        )
-                        previewPermissionBadge(
-                            title: "Screen Recording",
-                            granted: CGPreflightScreenCaptureAccess(),
-                            symbol: "record.circle",
-                            settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        )
-                    }
-
-                    SettingsSlider(
-                        title: "Hover delay",
-                        value: $store.windowPreviewDelay,
-                        range: 0.05...0.75,
-                        valueText: String(format: "%.2f s", store.windowPreviewDelay)
-                    )
-
-                    Picker(
-                        "Maximum previews",
-                        selection: $store.windowPreviewLimit
-                    ) {
-                        Text("4").tag(4)
-                        Text("6").tag(6)
-                        Text("8").tag(8)
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-
-            SettingsCard("App audio", systemImage: "speaker.wave.2") {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Per-app volume profiles")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Set a separate level or mute state for each app. MacSpaces remembers it by bundle identifier.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 12)
-                    Button("Open App Mixer") {
-                        audioMixer.start()
-                        showingAudioMixer = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .popover(
-                        isPresented: $showingAudioMixer,
-                        arrowEdge: .top
-                    ) {
-                        AudioMixerPanel(mixer: audioMixer)
-                    }
-                }
-
-                if !store.widgets.contains(where: { $0.kind == .audio }) {
-                    Button {
-                        store.add(.audio)
-                    } label: {
-                        Label(
-                            "Add Audio Controls to OpenDock",
-                            systemImage: "plus"
-                        )
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-            .onChange(of: showingAudioMixer) { showing in
-                if !showing,
-                   !store.widgets.contains(where: { $0.kind == .audio }) {
-                    audioMixer.stop()
-                }
-            }
-
-
-            SettingsCard("Profile", systemImage: "rectangle.3.group") {
-                HStack {
-                    Picker("Active profile", selection: $store.activeProfileID) {
-                        ForEach(store.profiles) { profile in
-                            Text(profile.name).tag(profile.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 220)
-
-                    TextField(
-                        "Profile name",
-                        text: Binding(
-                            get: { store.activeProfile.name },
-                            set: { store.renameProfile(store.activeProfile, to: $0) }
-                        )
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    Menu {
-                        Button("New Empty Profile") {
-                            store.addProfile(named: "Dock \(store.profiles.count + 1)")
-                        }
-                        Button("Duplicate Current") {
-                            store.addProfile(
-                                named: "\(store.activeProfile.name) Copy",
-                                copyingCurrent: true
-                            )
-                        }
-                        Divider()
-                        Button("Delete Current", role: .destructive) {
-                            store.removeProfile(store.activeProfile)
-                        }
-                        .disabled(store.profiles.count == 1)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-            }
-
-            SettingsCard("Placement", systemImage: "rectangle.bottomthird.inset.filled") {
-                Picker("Screen edge", selection: Binding(get: { store.effectivePosition }, set: { store.position = $0 })) {
-                    ForEach(DockPlacementPolicy.allowedEdges(appleDock: appleDock.edge)) { position in
-                        Text(position.title).tag(position)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text("Apple’s Dock is on the \(appleDock.edge.title.lowercased()). OpenDock keeps that edge free and moves automatically when it changes.")
-                    .font(.caption).foregroundStyle(.secondary)
-
-                SettingsSlider(
-                    title: "Edge offset",
-                    value: $store.edgeOffset,
-                    range: 0...40,
-                    valueText: "\(Int(store.edgeOffset)) pt"
-                )
-
-                DisplayTargetPicker(
-                    mode: $store.displayMode,
-                    selectedIDs: $store.selectedDisplayIDs,
-                    preferBuiltIn: false
-                )
-            }
-
-            SettingsCard("Sizing", systemImage: "arrow.up.left.and.arrow.down.right") {
-                SettingsSlider(
-                    title: "Widget size",
-                    value: $store.tileSize,
-                    range: 56...96,
-                    valueText: "\(Int(store.tileSize)) pt"
-                )
-
-                if store.effectivePosition.isVertical {
-                    SettingsSlider(
-                        title: "Side Dock width",
-                        value: $store.sideDockWidth,
-                        range: 104...220,
-                        valueText: "\(Int(store.sideDockWidth)) pt"
-                    )
-                }
-            }
-
-            SettingsCard("Behavior", systemImage: "cursorarrow.rays") {
-                Toggle("Auto-hide at the screen edge", isOn: $store.autoHide)
-                if store.autoHide {
-                    SettingsSlider(
-                        title: "Hide delay",
-                        value: $store.hideDelay,
-                        range: 0.1...1.2,
-                        valueText: String(format: "%.2f s", store.hideDelay)
-                    )
-                }
-                Toggle("Dock is visible", isOn: $store.isDockVisible)
-            }
-        }
-        .alert("Reset OpenDock?", isPresented: $showingResetConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
-                store.resetToDefaults()
-                theme.reset(.dock)
-                app.dockEnabled = true
-            }
-        } message: {
-            Text("This removes OpenDock profiles and widgets, then restores its theme, placement, size, displays, previews, and behavior defaults.")
-        }
-    }
-
-    private func requestWindowPreviewPermissions() {
-        if !AXIsProcessTrusted() {
-            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-            AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
-        }
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-        }
-    }
-
-    private func previewPermissionBadge(
-        title: String,
-        granted: Bool,
-        symbol: String,
-        settingsURL: String
-    ) -> some View {
-        Button {
-            guard let url = URL(string: settingsURL) else { return }
-            NSWorkspace.shared.open(url)
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: symbol)
-                Text(title)
-                    .lineLimit(1)
-                Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(granted ? Color.green : Color.orange)
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-            .background(
-                Color.primary.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-        .help(granted ? "\(title) is allowed" : "Open \(title) settings")
-    }
-
-}
-
 struct SurfaceThemePicker: View {
     let surface: ThemeSurface
 
     @ObservedObject private var theme = ThemeStore.shared
-    @State private var selectedForPairing: ThemePreset?
 
     private let presets =
         ThemePreset.macSpacesPresets + ThemePreset.terminalPresets
 
     var body: some View {
         SettingsCard("Theme", systemImage: "paintpalette") {
-            Text("Choose one palette for \(surface.title). The same modern widget style is used everywhere.")
+            Text("Choose a palette for your Nook. Every widget shares one clean, modern style.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -459,30 +163,6 @@ struct SurfaceThemePicker: View {
                     .frame(width: 32)
                     .help("Choose a custom \(surface.title) color")
                 }
-            }
-
-            if let selectedForPairing,
-               theme.preset(for: surface.other) != selectedForPairing {
-                HStack(spacing: 8) {
-                    Image(systemName: "link")
-                        .font(.caption)
-                        .foregroundStyle(selectedForPairing.previewColor)
-                    Text("Match \(surface.other.title) to \(selectedForPairing.title)?")
-                        .font(.caption)
-                    Spacer()
-                    Button("Apply") {
-                        pair(selectedForPairing)
-                    }
-                    .buttonStyle(.borderless)
-                    Button {
-                        self.selectedForPairing = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(height: 24)
             }
 
             DisclosureGroup("Fine-tune appearance") {
@@ -602,21 +282,6 @@ struct SurfaceThemePicker: View {
         withAnimation(Design.spring()) {
             theme.setPreset(preset, for: surface)
         }
-        selectedForPairing = preset
-    }
-
-    private func pair(_ preset: ThemePreset) {
-        withAnimation(Design.spring()) {
-            theme.setPreset(preset, for: surface.other)
-            if preset == .custom {
-                if surface == .notch {
-                    theme.customDockHex = theme.customNotchHex
-                } else {
-                    theme.customNotchHex = theme.customDockHex
-                }
-            }
-        }
-        selectedForPairing = nil
     }
 
     private var customSurfaceColor: Binding<Color> {
@@ -671,15 +336,9 @@ struct SurfaceThemePicker: View {
 
 private struct ThemeSettingsPane: View {
     @ObservedObject private var theme = ThemeStore.shared
-    @State private var surface: ThemeSurface = .notch
-
     var body: some View {
-        SettingsPage(title: "Theme", subtitle: "One clean widget style. Colors for your whole workspace.") {
-            Picker("Surface", selection: $surface) {
-                Text("OpenNotch").tag(ThemeSurface.notch)
-                Text("OpenDock").tag(ThemeSurface.dock)
-            }.pickerStyle(.segmented)
-            SurfaceThemePicker(surface: surface)
+        SettingsPage(title: "Theme", subtitle: "Make your Nook feel at home.") {
+            SurfaceThemePicker(surface: .notch)
             SettingsCard("Motion", systemImage: "sparkles") {
                 Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
             }
@@ -703,13 +362,7 @@ private struct PermissionsSettingsPane: View {
                     status: cameraStatus,
                     settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
                 )
-                PermissionRow(
-                    title: "Microphone",
-                    detail: "Voice Memo widget",
-                    symbol: "mic",
-                    status: microphoneStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-                )
+
                 PermissionRow(
                     title: "Calendars",
                     detail: "Calendar and meeting widgets",
@@ -724,36 +377,10 @@ private struct PermissionsSettingsPane: View {
                     status: eventStatus(.reminder),
                     settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"
                 )
-                PermissionRow(
-                    title: "Location",
-                    detail: "Local weather",
-                    symbol: "location",
-                    status: locationStatus,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"
-                )
-                PermissionRow(
-                    title: "Accessibility",
-                    detail: "Window management, Dock app detection, and exact window focus",
-                    symbol: "accessibility",
-                    status: AXIsProcessTrusted() ? .granted : .notGranted,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                )
-                PermissionRow(
-                    title: "Screen Recording",
-                    detail: "Live thumbnails for OpenDock window previews",
-                    symbol: "record.circle",
-                    status: CGPreflightScreenCaptureAccess() ? .granted : .notGranted,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                )
-                PermissionRow(
-                    title: "System Audio",
-                    detail: "Per-app volume and live mixer levels",
-                    symbol: "waveform",
-                    status: AppServices.shared.audioMixer.isMixerRunning
-                        ? .granted
-                        : .review,
-                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture"
-                )
+
+
+
+
                 PermissionRow(
                     title: "Media apps & browsers",
                     detail: "Now Playing metadata fallback",
@@ -763,9 +390,13 @@ private struct PermissionsSettingsPane: View {
                 )
             }
 
+            SettingsCard("Weather", systemImage: "cloud.sun") {
+                PermissionRow(title: "Location", detail: "Local weather when the Weather widget is enabled", symbol: "location", status: locationStatus,
+                    settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+            }
             SettingsCard("Privacy", systemImage: "lock.shield") {
                 Label("Clipboard history, notes, profiles, and tray items stay on this Mac.", systemImage: "checkmark.shield")
-                Label("Network widgets contact only the service they display.", systemImage: "network")
+                Label("Weather, lyrics, and app updates use their respective online services.", systemImage: "network")
             }
         }
     }
@@ -875,7 +506,7 @@ private struct AboutSettingsPane: View {
                 Text("Version \(version)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("One app. Two surfaces. Your Mac, arranged around the way you work.")
+                Text("Music, focus, files and everyday tools. One thoughtfully arranged Nook.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

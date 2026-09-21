@@ -26,7 +26,7 @@ let plate = NSBezierPath(
 NSColor.black.setFill()
 plate.fill()
 
-// Two surfaces, reduced to a direct monochrome "//" mark. There are no
+// A direct monochrome "//" mark. There are no
 // gradients, shadows, highlights, or faux-device details.
 NSColor.white.setStroke()
 for centerX in [402.0, 622.0] {

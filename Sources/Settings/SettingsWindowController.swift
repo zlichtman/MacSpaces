@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Presents one predictable settings window on the active Space and brings it
-/// forward even when invoked from a non-activating Nook or Dock panel.
+/// forward even when invoked from a non-activating Nook panel.
 @MainActor
 final class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()

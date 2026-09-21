@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct QuickActionsWidget: View {
     var body: some View {
@@ -12,11 +13,11 @@ struct QuickActionsWidget: View {
                 }
             }
             HStack(spacing: 6) {
-                actionButton("lock.fill", "Lock screen") {
-                    QuickActions.lockScreen()
+                actionButton("moon.stars", "Start screen saver") {
+                    QuickActions.openScreenSaver()
                 }
-                actionButton("trash", "Empty Trash") {
-                    QuickActions.emptyTrash()
+                actionButton("gearshape", "Open System Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:")!)
                 }
             }
         }

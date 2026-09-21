@@ -144,7 +144,7 @@ enum ThemeSurface {
     case notch, dock
 
     var other: ThemeSurface { self == .notch ? .dock : .notch }
-    var title: String { self == .notch ? "OpenNotch" : "OpenDock" }
+    var title: String { self == .notch ? "Nook" : "Legacy" }
 }
 
 enum AccentChoice: String, Codable, CaseIterable, Identifiable {
@@ -245,7 +245,6 @@ enum WidgetVisualStyle: String, Codable, CaseIterable, Identifiable {
     }
 
     static func styles(for kind: NookWidgetKind) -> [WidgetVisualStyle] { [.studio] }
-    static func styles(for kind: WidgetKind) -> [WidgetVisualStyle] { [.studio] }
 
 }
 

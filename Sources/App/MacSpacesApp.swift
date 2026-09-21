@@ -13,24 +13,14 @@ struct MacSpacesApp: App {
 
 private struct MenuBarMenu: View {
     @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var dockStore = DockStore.shared
     @ObservedObject private var nookSettings = NookSettings.shared
 
     var body: some View {
-        Toggle("Notch Hub", isOn: $settings.notchEnabled)
-        Toggle("Widget Dock", isOn: $settings.dockEnabled)
+        Toggle("Nook", isOn: $settings.notchEnabled)
 
         if settings.notchEnabled {
             Picker("Nook Profile", selection: $nookSettings.activeProfileID) {
                 ForEach(nookSettings.profiles) { profile in
-                    Text(profile.name).tag(profile.id)
-                }
-            }
-        }
-
-        if settings.dockEnabled {
-            Picker("Dock Profile", selection: $dockStore.activeProfileID) {
-                ForEach(dockStore.profiles) { profile in
                     Text(profile.name).tag(profile.id)
                 }
             }
@@ -146,7 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let showSettingsObserver {
             DistributedNotificationCenter.default().removeObserver(showSettingsObserver)
         }
-        DockStore.shared.flushPersistence()
         NookSettings.shared.flushPersistence()
     }
 }

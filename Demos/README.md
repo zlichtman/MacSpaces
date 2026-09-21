@@ -1,2 +1,9 @@
-Screenshots of MacSpaces as shown on https://zlichtman.com/open-source#macspaces.
-Captured from the opt-in visual QA renderer (`MACSPACES_VISUAL_QA=1`, see AGENTS.md).
+# Native Nook demos
+
+Generated from the isolated WebsiteDemoCapture helper using synthetic data.
+Gold pairs Phantogram with warm controls; Midnight pairs Modern English with
+blue controls; Everforest uses charcoal, sage and warm text with Lana Del Rey.
+
+No real camera feeds, user clipboard entries, or personal files appear here.
+See AGENTS.md for capture instructions. Website scenes use independent captures
+for the laptop overview, widget close-ups and file Tray.

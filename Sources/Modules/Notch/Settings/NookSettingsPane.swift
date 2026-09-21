@@ -8,12 +8,12 @@ struct NookSettingsPane: View {
 
     var body: some View {
         SettingsPage(
-            title: "OpenNotch",
+            title: "Nook",
             subtitle: "Choose your widgets, then make the Nook fit your day."
         ) {
-            SettingsCard("OpenNotch", systemImage: "power") {
+            SettingsCard("Nook", systemImage: "power") {
                 HStack {
-                    Toggle("Enable OpenNotch", isOn: $app.notchEnabled)
+                    Toggle("Enable Nook", isOn: $app.notchEnabled)
                     Spacer(minLength: 16)
                     Button("Reset…") {
                         showingResetConfirmation = true
@@ -174,7 +174,7 @@ struct NookSettingsPane: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .alert("Reset OpenNotch?", isPresented: $showingResetConfirmation) {
+        .alert("Reset Nook?", isPresented: $showingResetConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
                 settings.resetToDefaults()
@@ -182,7 +182,7 @@ struct NookSettingsPane: View {
                 app.notchEnabled = true
             }
         } message: {
-            Text("This removes OpenNotch profiles and widgets, then restores its theme, size, displays, activities, and behavior defaults.")
+            Text("This removes Nook profiles and widgets, then restores its theme, size, displays, activities, and behavior defaults.")
         }
     }
 

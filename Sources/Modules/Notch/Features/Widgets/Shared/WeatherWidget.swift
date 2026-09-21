@@ -3,6 +3,8 @@ import SwiftUI
 struct WeatherWidget: View {
     @ObservedObject var service: WeatherService
     var compact = false
+    var surface: ThemeSurface = .dock
+    var onDetailsChanged: (Bool) -> Void = { _ in }
     @State private var showingDetails = false
     @State private var widgetHovered = false
     @State private var popoverHovered = false
@@ -12,19 +14,17 @@ struct WeatherWidget: View {
         Group {
             if let weather = service.snapshot {
                 if compact {
-                    HStack(spacing: 7) {
-                        Image(systemName: weather.symbolName)
-                            .font(.system(size: 13))
-                            .symbolRenderingMode(.multicolor)
-                        Text("\(Int(weather.temperature.rounded()))°")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                        Spacer(minLength: 2)
-                        Text("H \(Int(weather.high.rounded()))° · L \(Int(weather.low.rounded()))°")
-                            .font(.system(size: 7.5, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 9)
+                    VStack(spacing: 5) {
+                        HStack(spacing: 7) {
+                            Image(systemName: weather.symbolName).symbolRenderingMode(.multicolor)
+                            Text("\(Int(weather.temperature.rounded()))°")
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        }
+                        Text("H \(Int(weather.high.rounded()))°  L \(Int(weather.low.rounded()))°")
+                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }.padding(.horizontal, 8)
+
                 } else {
                     VStack(spacing: 3) {
                         Image(systemName: weather.symbolName)
@@ -68,7 +68,7 @@ struct WeatherWidget: View {
         }
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             if let weather = service.snapshot {
-                WeatherDetailsView(weather: weather)
+                WeatherDetailsView(weather: weather, surface: surface)
                     .onHover { hovering in
                         popoverHovered = hovering
                         if hovering {
@@ -79,7 +79,9 @@ struct WeatherWidget: View {
                     }
             }
         }
+        .onChange(of: showingDetails) { onDetailsChanged($0) }
         .onDisappear {
+            onDetailsChanged(false)
             dismissTask?.cancel()
         }
     }
@@ -96,8 +98,10 @@ struct WeatherWidget: View {
     }
 }
 
-private struct WeatherDetailsView: View {
+struct WeatherDetailsView: View {
     let weather: WeatherSnapshot
+    var surface: ThemeSurface = .notch
+    private var tokens: ThemeTokens { surface == .notch ? theme.notch : theme.dock }
     @ObservedObject private var theme = ThemeStore.shared
 
     var body: some View {
@@ -142,10 +146,10 @@ private struct WeatherDetailsView: View {
         .background {
             ZStack {
                 VisualEffectView(material: .popover)
-                theme.dock.surface.opacity(0.76)
+                tokens.surface.opacity(0.76)
             }
         }
-        .environment(\.colorScheme, theme.dock.colorScheme)
+        .environment(\.colorScheme, tokens.colorScheme)
     }
 
     private func weatherMetric(
@@ -163,7 +167,7 @@ private struct WeatherDetailsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(
-            theme.dock.control.opacity(0.72),
+            tokens.control.opacity(0.72),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
     }
