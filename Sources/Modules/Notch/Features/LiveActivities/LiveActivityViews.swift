@@ -70,43 +70,93 @@ struct SystemActivityValueView: View {
     }
 }
 
+/// A consistently sized battery silhouette with a real level, shared by the
+/// compact activity, widget and accessory details. Unknown stays unfilled.
+struct BatteryGaugeView: View {
+    let level: Int?
+    var charging = false
+    let tint: Color
+    var width: CGFloat = 28
+
+    var body: some View {
+        HStack(spacing: 1.5) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).strokeBorder(.primary.opacity(0.55), lineWidth: 1.2)
+                if let level {
+                    RoundedRectangle(cornerRadius: 1.6)
+                        .fill(tint)
+                        .frame(width: level > 0 ? max(1.6, (width - 9) * CGFloat(min(100, level)) / 100) : 0)
+                        .padding(2.5)
+                }
+                if charging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: width * 0.3, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            RoundedRectangle(cornerRadius: 1).fill(.primary.opacity(0.55))
+                .frame(width: 2, height: width * 0.19)
+        }
+        .frame(width: width, height: width * 0.47)
+        .accessibilityHidden(true)
+    }
+}
+
+struct BluetoothActivityIdentityView: View {
+    @ObservedObject var monitor: BluetoothMonitor
+    @ObservedObject private var theme = ThemeStore.shared
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: monitor.activitySystemImage)
+                .font(.system(size: 21, weight: .medium))
+                .foregroundStyle(theme.notch.accent)
+                .frame(width: 27)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(monitor.lastChangedDeviceName ?? "Bluetooth device")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1).truncationMode(.middle)
+                if compact {
+                    HStack(spacing: 6) {
+                        Text(monitor.activityState.title)
+                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                        if let level = monitor.activityBatteryPercent {
+                            Text("\(level)%").font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(level <= 20 ? Color.orange : .primary)
+                                .monospacedDigit().fixedSize()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("\(monitor.activityLabel) · \(monitor.activityState.title)")
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct BluetoothActivityValueView: View {
     @ObservedObject var monitor: BluetoothMonitor
     @ObservedObject private var theme = ThemeStore.shared
 
-    private var stateLabel: String {
-        switch monitor.activityState {
-        case .connected: return "Connected"
-        case .disconnected: return "Disconnected"
-        case .battery: return "Battery"
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 6) {
-            Text(monitor.lastChangedDeviceName ?? "Bluetooth device")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.primary.opacity(0.92))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            if monitor.activityState == .disconnected {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(.secondary)
-            } else if let battery = monitor.activityBatteryPercent {
-                Text("\(battery)%")
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(battery <= 20 ? Color.orange : theme.notch.accent)
-                    .fixedSize()
+        VStack(spacing: 1) {
+            if let level = monitor.activityBatteryPercent {
+                HStack(spacing: 7) {
+                    BatteryGaugeView(level: level, tint: level <= 20 ? .orange : theme.notch.accent)
+                    Text("\(level)%").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                }
             }
+            Text(monitor.activityState.title)
+                .font(.system(size: monitor.activityBatteryPercent == nil ? 11 : 9, weight: .medium))
+                .foregroundStyle(monitor.activityState == .disconnected ? .primary : .secondary)
         }
-        .padding(.trailing, 10)
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .help("\(monitor.activityLabel) — \(stateLabel)")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(monitor.activityLabel), \(stateLabel)")
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("\(monitor.activityLabel), \(monitor.activityState.title)")
     }
 }
 
@@ -139,31 +189,42 @@ struct MusicActivityArtworkView: View {
     }
 }
 
-/// Charging bolt / battery icon (left side of the notch after power changes).
 struct PowerActivityIconView: View {
     @ObservedObject var monitor: PowerSourceMonitor
     @ObservedObject private var theme = ThemeStore.shared
+    var compact = false
 
     var body: some View {
-        NotchActivityGlyphView(
-            systemImage: monitor.activitySystemImage,
-            tint: monitor.isLowBatteryActivity ? .red : theme.notch.accent
-        )
+        HStack(spacing: 8) {
+            BatteryGaugeView(level: monitor.hasReading ? monitor.batteryLevel : nil,
+                charging: monitor.isCharging,
+                tint: monitor.isLowBatteryActivity ? .orange : theme.notch.accent, width: 30)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(compact ? "\(monitor.batteryLevel)%" : "Mac battery")
+                    .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                if compact {
+                    Text(monitor.isLowBatteryActivity ? "Low battery" : monitor.statusLabel)
+                        .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(monitor.activityLabel)
     }
 }
 
-/// Battery percentage label (right side of the notch after power changes).
 struct PowerActivityLabelView: View {
     @ObservedObject var monitor: PowerSourceMonitor
-    @ObservedObject private var theme = ThemeStore.shared
-
     var body: some View {
-        Text(monitor.activityLabel)
-            .font(.system(size: 9, weight: .semibold, design: .rounded))
-            .foregroundStyle(monitor.isLowBatteryActivity ? Color.red : theme.notch.accent)
-            .lineLimit(1)
-            .minimumScaleFactor(0.84)
-            .padding(.trailing, 10)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        VStack(spacing: 1) {
+            Text("\(monitor.batteryLevel)%")
+                .font(.system(size: 13, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(monitor.isLowBatteryActivity ? Color.orange : .primary)
+            Text(monitor.isLowBatteryActivity ? "Low battery" : monitor.statusLabel)
+                .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+        }
+        .lineLimit(1).frame(maxWidth: .infinity)
+        .accessibilityLabel(monitor.activityLabel)
     }
 }

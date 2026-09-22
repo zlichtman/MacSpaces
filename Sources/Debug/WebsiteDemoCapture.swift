@@ -12,9 +12,21 @@ enum WebsiteDemoCapture {
         let output = URL(fileURLWithPath: env["MACSPACES_DEMO_OUTPUT"] ?? "/private/tmp/macspaces-nook-demo")
         try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         InteractionRegressionChecks.run()
+        DeviceRegressionChecks.run()
         let settings = NookSettings.shared
         let services = AppServices.shared
         let theme = ThemeStore.shared
+        if env["MACSPACES_DEVICE_AUDIT"] == "1" {
+            services.powerMonitor.start()
+            services.bluetooth.start()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
+                let devices = services.bluetooth.connectedDevices
+                print("Device audit: connected=\(devices.count), withBattery=\(devices.filter { $0.batteryPercent != nil }.count), withComponents=\(devices.filter { $0.batteryLevels.left != nil || $0.batteryLevels.right != nil }.count), powerRead=\(services.powerMonitor.hasReading), charging=\(services.powerMonitor.isCharging), externalPower=\(services.powerMonitor.isOnExternalPower)")
+                services.bluetooth.stop(); services.powerMonitor.stop()
+                NSApp.terminate(nil)
+            }
+            return true
+        }
         settings.showTeleprompterBar = false
         settings.showMusicLiveActivity = true
         settings.showTimerLiveActivity = false
@@ -64,7 +76,12 @@ enum WebsiteDemoCapture {
             info.isPlaying = true; info.elapsed = 74; info.duration = index == 2 ? 201 : 253
             info.artwork = NSImage(contentsOfFile: index == 0 ? "/private/tmp/macspaces-phantogram.jpg" : index == 1 ? "/private/tmp/macspaces-pillow-lips.jpg" : "/private/tmp/macspaces-fog-lake.jpg")!
             services.nowPlaying.setPreviewInfo(info)
-            profile([.media, .weather, .clock, .notes])
+            let overviewProfiles: [[NookWidgetKind]] = [
+                [.media, .weather, .clock, .notes],
+                [.pomodoro, .clipboard, .media],
+                [.quickActions, .media, .timer, .weather],
+            ]
+            profile(overviewProfiles[index])
             let overview = model(); overview.state = .expanded
             render(camera(NotchContainerView(viewModel: overview)).frame(width: 1000, height: 620, alignment: .top),
                    size: CGSize(width: 1000, height: 620), to: output.appendingPathComponent("laptop-\(name).png"))
@@ -100,6 +117,49 @@ enum WebsiteDemoCapture {
             render(camera(NotchContainerView(viewModel: nook)).frame(width: 740, height: 340),
                    size: CGSize(width: 740, height: 340), to: output.appendingPathComponent("regression-\(name).png"))
         }
+        // Synthetic accessory fixtures keep personal names/addresses out of captures.
+        settings.showPowerLiveActivity = true
+        settings.showBluetoothLiveActivity = true
+        settings.showTimerLiveActivity = false
+        for preset in [ThemePreset.midnight, .forest, .frosted] {
+            theme.setPreset(preset, for: .notch)
+            settings.showMusicLiveActivity = false
+            services.powerMonitor.setPreview(level: 74, externalPower: true, charging: false, activity: false)
+            for (label, state, level) in [("connected", BluetoothActivityState.connected, Optional(64)),
+                                          ("unknown", .connected, nil), ("disconnected", .disconnected, nil)] {
+                services.bluetooth.setPreviewChange(deviceName: "Studio AirPods Pro", batteryPercent: level, state: state)
+                let device = model(); device.state = .collapsed
+                render(camera(NotchContainerView(viewModel: device)).frame(width: 800, height: 75, alignment: .top),
+                    size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("device-\(preset.rawValue)-\(label).png"))
+            }
+            settings.showMusicLiveActivity = true
+            services.bluetooth.setPreviewChange(deviceName: "Alex’s noise-cancelling headphones", batteryPercent: 64)
+            let pair = model(); pair.state = .collapsed
+            render(camera(NotchContainerView(viewModel: pair)).frame(width: 800, height: 75, alignment: .top),
+                size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("device-\(preset.rawValue)-music.png"))
+            precondition(model(availableWidth: 520).collapsedSize.width <= 488)
+            precondition(model(hardware: false, availableWidth: 520).collapsedSize.width <= 488)
+            settings.showBluetoothLiveActivity = false
+            services.powerMonitor.setPreview(level: 74, externalPower: true, charging: false)
+            let power = model(); power.state = .collapsed
+            render(camera(NotchContainerView(viewModel: power)).frame(width: 800, height: 75, alignment: .top),
+                size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("power-\(preset.rawValue).png"))
+            settings.showBluetoothLiveActivity = true
+        }
+        theme.setPreset(.forest, for: .notch)
+        services.powerMonitor.setPreview(level: 14, activity: false)
+        let levels = BluetoothBatteryLevels(left: 80, right: 60, caseLevel: 1)
+        services.bluetooth.setPreviewDevices([
+            BluetoothDeviceSnapshot(id: "buds", name: "Studio AirPods Pro", batteryPercent: levels.primary, batteryLevels: levels),
+            BluetoothDeviceSnapshot(id: "keyboard", name: "Desk keyboard", batteryPercent: nil),
+        ])
+        render(BatteryDetailsView(monitor: services.powerMonitor, bluetooth: services.bluetooth)
+            .background(Color(nsColor: .windowBackgroundColor)), size: CGSize(width: 380, height: 400),
+            to: output.appendingPathComponent("battery-device-details.png"))
+        profile([.media, .battery, .clock])
+        let batteryNook = model(); batteryNook.state = .expanded
+        render(camera(NotchContainerView(viewModel: batteryNook)).frame(width: 800, height: 330, alignment: .top),
+            size: CGSize(width: 800, height: 330), to: output.appendingPathComponent("battery-nook.png"))
         print("Nook-only native captures and layout checks passed: \(output.path)")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
         return true

@@ -180,11 +180,18 @@ struct NotchContainerView: View {
 
     @ViewBuilder
     private func pairedActivity(_ activity: CollapsedActivityKind) -> some View {
-        HStack(spacing: 5) {
-            leftActivity(activity)
-            rightActivity(activity)
+        switch activity {
+        case .bluetooth:
+            BluetoothActivityIdentityView(monitor: bluetoothMonitor, compact: true)
+        case .power:
+            PowerActivityIconView(monitor: powerMonitor, compact: true)
+        default:
+            HStack(spacing: 5) {
+                leftActivity(activity)
+                rightActivity(activity)
+            }
+            .padding(.horizontal, 10)
         }
-        .padding(.horizontal, 10)
     }
 
     @ViewBuilder
@@ -197,10 +204,7 @@ struct NotchContainerView: View {
         case .music:
             MusicActivityArtworkView(nowPlaying: viewModel.nowPlaying)
         case .bluetooth:
-            Image(systemName: bluetoothMonitor.activitySystemImage)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(bluetoothActivityColor)
-                .frame(width: 21, height: 21)
+            BluetoothActivityIdentityView(monitor: bluetoothMonitor)
         case .power:
             PowerActivityIconView(monitor: viewModel.powerMonitor)
         case .system:
@@ -234,14 +238,6 @@ struct NotchContainerView: View {
                     tint: systemActivityColor(activity)
                 )
             }
-        }
-    }
-
-    private var bluetoothActivityColor: Color {
-        switch bluetoothMonitor.activityState {
-        case .connected: return theme.notch.accent
-        case .disconnected: return .red
-        case .battery: return theme.notch.accent
         }
     }
 

@@ -384,7 +384,8 @@ private struct NookDashboardTile: View {
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .padding(6)
         case .battery:
-            NookBatteryWidget(monitor: viewModel.powerMonitor, compact: compact)
+            NookBatteryWidget(monitor: viewModel.powerMonitor, bluetooth: viewModel.bluetoothMonitor, compact: compact,
+                              onDetailsChanged: { viewModel.isDeviceDetailsPresented = $0 })
         case .clock:
             NookClockWidget(style: visualStyle, compact: compact)
         case .weather:
@@ -526,42 +527,6 @@ private struct NookTimerWidget: View {
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-private struct NookBatteryWidget: View {
-    @ObservedObject var monitor: PowerSourceMonitor
-    @ObservedObject private var theme = ThemeStore.shared
-    let compact: Bool
-
-    var body: some View {
-        Group {
-            if compact {
-                HStack(spacing: 8) {
-                    Image(systemName: monitor.isCharging ? "bolt.fill" : "battery.100percent")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.notch.accent)
-                    Text(monitor.hasBattery ? "\(monitor.batteryLevel)%" : "Desktop")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                    Spacer(minLength: 2)
-                    Text(monitor.isCharging ? "Charging" : "Power")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 9)
-            } else {
-                VStack(spacing: 7) {
-                    Image(systemName: monitor.isCharging ? "bolt.fill" : "battery.100percent")
-                        .font(.system(size: 23, weight: .medium))
-                        .foregroundStyle(theme.notch.accent)
-                    Text(monitor.hasBattery ? "\(monitor.batteryLevel)%" : "Desktop")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    Text(monitor.isCharging ? "Charging" : "Power")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
         }

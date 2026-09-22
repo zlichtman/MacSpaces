@@ -54,6 +54,20 @@ final class NotchManager {
             .sink { [weak self] _ in self?.rebuildWindows() }
             .store(in: &cancellables)
 
+        // Live device names can need more room than a small widget profile.
+        // Resize the host window too, otherwise SwiftUI draws beyond its bounds.
+        Publishers.MergeMany([
+            bluetoothMonitor.objectWillChange, powerMonitor.objectWillChange,
+            nowPlaying.objectWillChange, timerService.objectWillChange,
+            systemActivityMonitor.objectWillChange,
+        ])
+        .debounce(for: .milliseconds(20), scheduler: DispatchQueue.main)
+        .sink { [weak self] _ in
+            guard self?.isDisplayTransitionActive == false else { return }
+            self?.updateWindowFrames()
+        }
+        .store(in: &cancellables)
+
         settings.objectWillChange
             .debounce(for: .milliseconds(40), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -159,7 +173,9 @@ final class NotchManager {
     private func updateWindowFrames() {
         for entry in entries {
             let frame = windowFrame(for: entry.viewModel, on: entry.screen)
-            entry.window.setFrame(frame, display: true, animate: false)
+            if entry.window.frame != frame {
+                entry.window.setFrame(frame, display: true, animate: false)
+            }
         }
     }
 

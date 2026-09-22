@@ -32,6 +32,14 @@ Service demand follows enabled Nook widgets. Clipboard history is memory-only
 and excludes concealed/transient pasteboard types. Weather starts only when its
 widget is enabled; hover details keep the Nook open. Weather uses Open-Meteo and
 an IP location fallback. Lyrics use their provider, and updates use GitHub.
+Battery widgets also keep Bluetooth monitoring active. Connection and battery
+feedback precede routine system-control feedback. The host window tracks live
+activity size, including long accessory names on displays without a notch.
+Bluetooth uses paired-device reads plus the macOS connected-device report when
+IOBluetooth omits accessories. Battery reads are cached for 30 seconds; connection
+fallback refreshes every four seconds. Unknown values stay unknown, and earbud
+and case levels remain separate. Power uses the internal battery's capacity ratio
+and charging flag, not the presence of external power.
 Camera access belongs only to the optional Mirror. Never request permissions for
 unused features or use real camera/clipboard content in promotional captures.
 
@@ -63,6 +71,9 @@ The helper requires the separate bundle identifier, uses synthetic data, and
 never reads real camera or clipboard content. Artwork paths are explicit in
 WebsiteDemoCapture. Only safe, populated native Nook views are exported.
 
+DeviceRegressionChecks verifies power semantics, component battery parsing,
+gradual battery changes and connection events. MACSPACES_DEVICE_AUDIT=1 performs
+a read-only local-device check; it logs counts only, never names or addresses.
 InteractionRegressionChecks verifies proportional fill, stacked sizing, new
 widget persistence, the Nook-only sidebar and legacy style migration. Native
 captures check empty/small profiles and physical camera clearance. Inspect

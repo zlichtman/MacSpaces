@@ -20,6 +20,9 @@ macOS 13 or later · Apple silicon and Intel · Signed and notarized · MIT lice
   for work, listening or a quieter desktop.
 - Drop files onto the notch to open the Tray, then drag them into another app.
 - Compact live activities for music, timers, power and supported system controls.
+- Battery details for your Mac and connected devices, including separate earbud
+  and case readings when macOS reports them. Plugged in and charging are distinct.
+  Device notifications resize to keep names and percentages visible.
 - Settings are organized into General, Widgets, Appearance and Activities.
   Widget access appears with the widgets that need it; About & Updates is separate.
 

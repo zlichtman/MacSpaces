@@ -43,6 +43,7 @@ final class NotchViewModel: ObservableObject {
     @Published var selectedTab: NotchTab = .nook
     @Published var isDropTargeted = false
     var isWeatherDetailsPresented = false
+    var isDeviceDetailsPresented = false
 
     let geometry: NotchGeometry
     let settings: NookSettings
@@ -148,18 +149,17 @@ final class NotchViewModel: ObservableObject {
         let standardWidth =
             baseWidth + (hasStackedPair || isAwaitingPotentialMusicPair ? 26 : 0)
 
-        // Keep connection feedback on one readable line. Reserve the accessory
-        // separately so long names truncate before the battery value does.
+        // Device cards reserve readable name/status space and never extend
+        // beyond the display. Only the device name may truncate.
+        let maximumLane = max(0, (availableWidth - geometry.width - 32) / 2)
         if activities.contains(.bluetooth) {
             let name = bluetoothMonitor.lastChangedDeviceName ?? "Bluetooth device"
             let nameWidth = ceil((name as NSString).size(withAttributes: [
-                .font: NSFont.systemFont(ofSize: 10, weight: .medium)
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold)
             ]).width)
-            let accessoryWidth: CGFloat = bluetoothMonitor.activityState == .disconnected
-                ? 14 : (bluetoothMonitor.activityBatteryPercent == nil ? 0 : 38)
-            let chromeWidth: CGFloat = hasStackedPair ? 56 : 20
-            return max(standardWidth, min(180, nameWidth + accessoryWidth + chromeWidth))
+            return min(maximumLane, max(170, min(230, nameWidth + 62)))
         }
+        if activities.contains(.power) { return min(maximumLane, 150) }
 
         let dynamicLabel: String?
         if activities.contains(.system) {
@@ -190,9 +190,9 @@ final class NotchViewModel: ObservableObject {
         // Short-lived system/device feedback takes the first lane so a volume
         // or brightness change is never hidden behind persistent media/timer
         // activities. The highest-value persistent activity fills lane two.
-        if systemActivityMonitor.justChangedRecently { kinds.append(.system) }
         if settings.showPowerLiveActivity && powerMonitor.justChangedRecently { kinds.append(.power) }
         if settings.showBluetoothLiveActivity && bluetoothMonitor.justChangedRecently { kinds.append(.bluetooth) }
+        if systemActivityMonitor.justChangedRecently { kinds.append(.system) }
         if settings.showTimerLiveActivity && timerService.isRunning { kinds.append(.timer) }
         if settings.showMusicLiveActivity && nowPlaying.info.isPlaying { kinds.append(.music) }
         // The closed Nook remains a glanceable lane, not a compressed toolbar.
@@ -229,7 +229,7 @@ final class NotchViewModel: ObservableObject {
             // Leaving the window is expected while rearranging a card or
             // dragging a file. Keep polling until that interaction ends.
             guard !self.settings.isInteractiveReorderActive,
-                  !self.isDropTargeted, !self.isWeatherDetailsPresented else {
+                  !self.isDropTargeted, !(self.isWeatherDetailsPresented || self.isDeviceDetailsPresented) else {
                 self.scheduleCollapseCheck(after: 0.14)
                 return
             }
