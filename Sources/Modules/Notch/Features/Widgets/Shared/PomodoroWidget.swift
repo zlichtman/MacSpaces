@@ -2,10 +2,11 @@ import SwiftUI
 import AppKit
 
 /// Classic 25/5 pomodoro timer with a progress ring. Click to start/pause,
-/// right-click to reset or switch phase.
+/// right-click to reset or switch phase. The session lives in a shared model,
+/// so it keeps counting while the Nook is closed and matches across displays.
 struct PomodoroWidget: View {
     var compact = false
-    @StateObject private var model = PomodoroModel()
+    @ObservedObject private var model = PomodoroModel.shared
 
     var body: some View {
         Button {
@@ -41,7 +42,6 @@ struct PomodoroWidget: View {
                 .onEnded { model.reset() }
         )
         .help("Click to start or pause, double-click to reset, Option-click to switch phase")
-        .onDisappear { model.stopForRemoval() }
     }
 
     private var timerRing: some View {
@@ -84,6 +84,8 @@ struct PomodoroWidget: View {
 
 @MainActor
 final class PomodoroModel: ObservableObject {
+    static let shared = PomodoroModel()
+
     enum Phase {
         case work, rest
 

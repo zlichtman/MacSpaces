@@ -96,9 +96,9 @@ extension Array where Element == NookWidgetKind {
         guard naturalWidth > 0 else { return [:] }
         let gaps = CGFloat(Swift.max(0, columns.count - 1)) * spacing
         let scale = Swift.max(1, (availableWidth - gaps) / naturalWidth)
-        return Dictionary(uniqueKeysWithValues: columns.flatMap { column in
+        return Dictionary(columns.flatMap { column in
             column.kinds.map { ($0, column.width * scale) }
-        })
+        }, uniquingKeysWith: { first, _ in first })
     }
 
     func nookLayoutItems() -> [NookLayoutItem] {
@@ -164,9 +164,13 @@ struct NookProfile: Identifiable, Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
+        // Each widget appears once; a hand-edited or corrupted profile with
+        // repeats keeps the first occurrence instead of breaking layout.
+        var seen = Set<NookWidgetKind>()
         widgets = try container
             .decode([DecodableKind].self, forKey: .widgets)
             .compactMap(\.value)
+            .filter { seen.insert($0).inserted }
         widgetWidths = try container.decodeIfPresent(
             [String: Double].self,
             forKey: .widgetWidths

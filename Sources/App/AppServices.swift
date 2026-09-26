@@ -59,6 +59,11 @@ final class AppServices {
 
         needsTeleprompter ? teleprompter.start() : teleprompter.stop()
 
+        // The session outlives the closed panel, but not the widget itself.
+        if !(app.notchEnabled && nookWidgets.contains(.pomodoro)) {
+            PomodoroModel.shared.stopForRemoval()
+        }
+
         let needsWeather = app.notchEnabled && nookWidgets.contains(.weather)
         needsWeather ? weather.startIfNeeded() : weather.stop()
         let needsClipboard = app.notchEnabled && nookWidgets.contains(.clipboard)

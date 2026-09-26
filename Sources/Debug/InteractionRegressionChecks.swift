@@ -5,6 +5,11 @@ import AppKit
 enum InteractionRegressionChecks {
     static func run() {
         precondition(SettingsDestination.allCases.map(\.rawValue) == ["general", "widgets", "appearance", "activities"])
+        // Repeated widgets from hand-edited or corrupted profiles must not crash layout.
+        precondition([NookWidgetKind.weather, .weather, .clock].fittedNookWidths(availableWidth: 600).count == 2)
+        let repeated = #"{"id":"00000000-0000-0000-0000-000000000001","name":"Repeated","widgets":["weather","weather","clock","weather"]}"#
+        let decoded = try! JSONDecoder().decode(NookProfile.self, from: Data(repeated.utf8))
+        precondition(decoded.widgets == [.weather, .clock])
         for widgets: [NookWidgetKind] in [[.media], [.weather, .clock], [.media, .weather, .clock], [.media, .weather, .clock, .notes]] {
             for width: CGFloat in [420, 585, 740, 1100] {
                 let columns = widgets.nookLayoutItems()

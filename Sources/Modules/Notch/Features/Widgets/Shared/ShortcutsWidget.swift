@@ -19,9 +19,31 @@ struct ShortcutsWidget: View {
                 }
                 .foregroundStyle(.secondary)
             } else {
+                // The tile's right-click menu covers the widget, so overflow
+                // needs a visible control rather than a context-menu item.
+                let limit = compact ? 3 : 4
+                let overflows = service.names.count > limit
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(service.names.prefix(compact ? 3 : 4), id: \.self) { name in
+                    ForEach(service.names.prefix(overflows ? limit - 1 : limit), id: \.self) { name in
                         shortcutButton(name)
+                    }
+                    if overflows {
+                        Button {
+                            showingAll = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 8, weight: .bold))
+                                Text("\(service.names.count - (limit - 1)) more")
+                                    .font(.system(size: 10, weight: .medium))
+                                Spacer(minLength: 0)
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show all shortcuts")
                     }
                 }
                 .padding(.horizontal, 9)
@@ -30,10 +52,6 @@ struct ShortcutsWidget: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onAppear { service.startIfNeeded() }
-        .contextMenu {
-            Button("Show All Shortcuts") { showingAll = true }
-            Button("Refresh") { service.refresh() }
-        }
         .popover(isPresented: $showingAll, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
