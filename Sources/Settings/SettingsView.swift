@@ -7,9 +7,8 @@ import ApplicationServices
 import UserNotifications
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case general, widgets, appearance, activities, about
+    case general, widgets, appearance, activities
 
-    static var primary: [Self] { [.general, .widgets, .appearance, .activities] }
     var id: String { rawValue }
 
     var title: String {
@@ -18,7 +17,6 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .appearance: return "Appearance"
         case .activities: return "Activities"
-        case .about: return "About"
         }
     }
 
@@ -28,7 +26,6 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .widgets: return "square.grid.2x2"
         case .appearance: return "paintpalette"
         case .activities: return "waveform.path.ecg"
-        case .about: return "info.circle"
         }
     }
 }
@@ -71,17 +68,13 @@ struct SettingsView: View {
             .padding(.bottom, 16)
 
             VStack(spacing: 3) {
-                ForEach(SettingsDestination.primary) {
+                ForEach(SettingsDestination.allCases) {
                     sidebarItem($0)
                 }
             }
             .padding(.horizontal, 10)
 
             Spacer(minLength: 14)
-            Divider().padding(.horizontal, 20)
-            sidebarItem(.about)
-                .padding(10)
-                .padding(.bottom, 8)
         }
         .background(Color(nsColor: .underPageBackgroundColor))
     }
@@ -126,7 +119,6 @@ struct SettingsView: View {
         case .widgets: NookSettingsPane()
         case .appearance: AppearanceSettingsPane()
         case .activities: ActivitiesSettingsPane()
-        case .about: AboutSettingsPane()
         }
     }
 }
@@ -416,39 +408,6 @@ private struct PermissionRow: View {
             .disabled(status == .granted)
         }
         .padding(.vertical, 3)
-    }
-}
-
-private struct AboutSettingsPane: View {
-    var body: some View {
-        SettingsPage(
-            title: "About MacSpaces",
-            subtitle: "Version and project information."
-        ) {
-            VStack(spacing: 14) {
-                MacSpacesMark(size: 82)
-                Text("MacSpaces")
-                    .font(.system(size: 25, weight: .bold, design: .rounded))
-                Text("Version \(version)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Music, widgets and files at your notch.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 30)
-
-            SettingsCard("Open source", systemImage: "chevron.left.forwardslash.chevron.right") {
-                Text("Built with SwiftUI and AppKit. Personal data stays on-device unless a widget explicitly connects to a network service.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
 }
 

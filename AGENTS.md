@@ -20,7 +20,8 @@ widget profiles, a file Tray, compact live activities, optional Mirror, and lyri
   transitions) and optional trackpad `Haptics`; all of them honor Reduce Motion.
 - `Sources/Settings`: General (enable, startup, behavior, displays, software
   updates), Widgets (profiles, visual editor, lyrics, relevant access),
-  Appearance (palette, size, motion), Activities, and About. Permissions stay with enabled widgets.
+  Appearance (palette, size, motion) and Activities. There is no About page;
+  the installed version appears with software updates in General. Permissions stay with enabled widgets.
   Settings remember the current destination; Nook shortcuts open the relevant page.
 - `Sources/Services`: media, weather, calendar, clipboard, timers and related tools.
 - `Sources/Debug`: isolated demo rendering and regression assertions.

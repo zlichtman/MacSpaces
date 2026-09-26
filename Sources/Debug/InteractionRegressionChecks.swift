@@ -4,7 +4,7 @@ import AppKit
 @MainActor
 enum InteractionRegressionChecks {
     static func run() {
-        precondition(SettingsDestination.allCases.map(\.rawValue) == ["general", "widgets", "appearance", "activities", "about"])
+        precondition(SettingsDestination.allCases.map(\.rawValue) == ["general", "widgets", "appearance", "activities"])
         for widgets: [NookWidgetKind] in [[.media], [.weather, .clock], [.media, .weather, .clock], [.media, .weather, .clock, .notes]] {
             for width: CGFloat in [420, 585, 740, 1100] {
                 let columns = widgets.nookLayoutItems()
