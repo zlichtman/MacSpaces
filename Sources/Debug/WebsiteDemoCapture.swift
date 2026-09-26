@@ -30,7 +30,6 @@ enum WebsiteDemoCapture {
         settings.showTeleprompterBar = false
         settings.showMusicLiveActivity = true
         settings.showTimerLiveActivity = false
-        settings.showBluetoothLiveActivity = false
         settings.showPowerLiveActivity = false
         settings.expandedWidth = 860
         settings.expandedHeight = 270
@@ -117,35 +116,20 @@ enum WebsiteDemoCapture {
             render(camera(NotchContainerView(viewModel: nook)).frame(width: 740, height: 340),
                    size: CGSize(width: 740, height: 340), to: output.appendingPathComponent("regression-\(name).png"))
         }
-        // Synthetic accessory fixtures keep personal names/addresses out of captures.
         settings.showPowerLiveActivity = true
-        settings.showBluetoothLiveActivity = true
         settings.showTimerLiveActivity = false
         for preset in [ThemePreset.midnight, .forest, .frosted] {
             theme.setPreset(preset, for: .notch)
             settings.showMusicLiveActivity = false
-            services.powerMonitor.setPreview(level: 74, externalPower: true, charging: false, activity: false)
-            for (label, state, level) in [("connected", BluetoothActivityState.connected, Optional(64)),
-                                          ("unknown", .connected, nil), ("disconnected", .disconnected, nil)] {
-                services.bluetooth.setPreviewChange(deviceName: "Studio AirPods Pro", batteryPercent: level, state: state)
-                let device = model(); device.state = .collapsed
-                render(camera(NotchContainerView(viewModel: device)).frame(width: 800, height: 75, alignment: .top),
-                    size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("device-\(preset.rawValue)-\(label).png"))
-            }
-            settings.showMusicLiveActivity = true
-            services.bluetooth.setPreviewChange(deviceName: "Alex’s noise-cancelling headphones", batteryPercent: 64)
-            let pair = model(); pair.state = .collapsed
-            render(camera(NotchContainerView(viewModel: pair)).frame(width: 800, height: 75, alignment: .top),
-                size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("device-\(preset.rawValue)-music.png"))
             precondition(model(availableWidth: 520).collapsedSize.width <= 488)
             precondition(model(hardware: false, availableWidth: 520).collapsedSize.width <= 488)
-            settings.showBluetoothLiveActivity = false
             services.powerMonitor.setPreview(level: 74, externalPower: true, charging: false)
             let power = model(); power.state = .collapsed
             render(camera(NotchContainerView(viewModel: power)).frame(width: 800, height: 75, alignment: .top),
                 size: CGSize(width: 800, height: 75), to: output.appendingPathComponent("power-\(preset.rawValue).png"))
-            settings.showBluetoothLiveActivity = true
+            settings.showMusicLiveActivity = true
         }
+        // Synthetic accessory fixtures keep personal names/addresses out of captures.
         theme.setPreset(.forest, for: .notch)
         services.powerMonitor.setPreview(level: 14, activity: false)
         let levels = BluetoothBatteryLevels(left: 80, right: 60, caseLevel: 1)

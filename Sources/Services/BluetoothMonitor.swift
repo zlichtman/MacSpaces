@@ -8,40 +8,16 @@ struct BluetoothDeviceSnapshot: Identifiable, Equatable, Sendable {
     var batteryLevels = BluetoothBatteryLevels()
     var category = ""
 
-    var activityLabel: String {
-        batteryPercent.map { "\(name) \($0)%" } ?? name
-    }
     var systemImage: String { BluetoothMonitor.systemImage(for: name, category: category) }
 }
 
-enum BluetoothActivityState: Equatable, Sendable {
-    case connected, disconnected, battery
-    var title: String {
-        switch self {
-        case .connected: return "Connected"
-        case .disconnected: return "Disconnected"
-        case .battery: return "Battery updated"
-        }
-    }
-}
-
-/// Reads already-paired devices only; it never scans or initiates connections.
+/// Reads already-paired devices for the Battery widget only; it never scans,
+/// initiates connections or announces connection changes.
 @MainActor
 final class BluetoothMonitor: ObservableObject {
     @Published private(set) var connectedDevices: [BluetoothDeviceSnapshot] = []
-    @Published private(set) var justChangedRecently = false
-    @Published private(set) var lastChangedDeviceName: String?
-    @Published private(set) var activityLabel = "Bluetooth"
-    @Published private(set) var activitySystemImage = "headphones"
-    @Published private(set) var activityBatteryPercent: Int?
-    @Published private(set) var activityState: BluetoothActivityState = .connected
 
     private var timer: Timer?
-    private var previousDevices: [String: BluetoothDeviceSnapshot] = [:]
-    private var announcedBattery: [String: Int] = [:]
-    private var hideWorkItem: DispatchWorkItem?
-    private var pendingEvents: [(BluetoothDeviceSnapshot, BluetoothActivityState)] = []
-    private var activeDeviceID: String?
     private var generation = 0
     private var queryInFlight = false
     private var isRunning = false
@@ -52,9 +28,9 @@ final class BluetoothMonitor: ObservableObject {
         guard timer == nil else { return }
         isRunning = true
         generation += 1
-        refresh(announce: false)
+        refresh()
         let poll = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refresh(announce: true) }
+            Task { @MainActor [weak self] in self?.refresh() }
         }
         RunLoop.main.add(poll, forMode: .common)
         timer = poll
@@ -64,18 +40,12 @@ final class BluetoothMonitor: ObservableObject {
         isRunning = false
         generation += 1
         timer?.invalidate(); timer = nil
-        hideWorkItem?.cancel(); hideWorkItem = nil
-        pendingEvents.removeAll()
-        justChangedRecently = false
-        activeDeviceID = nil
-        previousDevices.removeAll()
-        announcedBattery.removeAll()
         connectedDevices = []
     }
 
-    func refreshBatteries() { refresh(announce: false, forceBattery: true) }
+    func refreshBatteries() { refresh(forceBattery: true) }
 
-    private func refresh(announce: Bool, forceBattery: Bool = false) {
+    private func refresh(forceBattery: Bool = false) {
         guard isRunning, !queryInFlight else { return }
         queryInFlight = true
         let requestedGeneration = generation
@@ -86,65 +56,9 @@ final class BluetoothMonitor: ObservableObject {
                 guard let self else { return }
                 self.queryInFlight = false
                 guard self.isRunning, self.generation == requestedGeneration else { return }
-                self.apply(devices, announce: announce)
+                if self.connectedDevices != devices { self.connectedDevices = devices }
             }
         }
-    }
-
-    /// Diff against the last announced battery, so gradual 1% changes eventually
-    /// produce an update. A newly available reading must not be silently missed.
-    func apply(_ devices: [BluetoothDeviceSnapshot], announce: Bool) {
-        let current = Dictionary(devices.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var events: [(BluetoothDeviceSnapshot, BluetoothActivityState)] = []
-        if announce {
-            for device in devices where previousDevices[device.id] == nil { events.append((device, .connected)) }
-            for device in connectedDevices where current[device.id] == nil { events.append((device, .disconnected)) }
-            for device in devices where previousDevices[device.id] != nil {
-                if let level = device.batteryPercent,
-                   announcedBattery[device.id].map({ abs($0 - level) >= 5 }) ?? true {
-                    events.append((device, .battery))
-                }
-            }
-        }
-        connectedDevices = devices
-        previousDevices = current
-        announcedBattery = announcedBattery.filter { current[$0.key] != nil }
-        for device in devices where !announce || events.contains(where: { $0.0.id == device.id }) {
-            announcedBattery[device.id] = device.batteryPercent
-        }
-        for (device, state) in events {
-            // A percentage arriving just after connection updates the existing
-            // card instead of hiding the connection or queuing a duplicate.
-            if justChangedRecently, activeDeviceID == device.id, state == .battery {
-                activityBatteryPercent = device.batteryPercent
-                activityLabel = device.activityLabel
-                continue
-            }
-            pendingEvents.removeAll { $0.0.id == device.id }
-            if justChangedRecently, activeDeviceID == device.id {
-                pendingEvents.insert((device, state), at: 0)
-                showNextEvent()
-            } else {
-                pendingEvents.append((device, state))
-            }
-        }
-        if !justChangedRecently { showNextEvent() }
-    }
-
-    private func showNextEvent() {
-        hideWorkItem?.cancel()
-        guard !pendingEvents.isEmpty else { justChangedRecently = false; activeDeviceID = nil; return }
-        let (device, state) = pendingEvents.removeFirst()
-        activeDeviceID = device.id
-        lastChangedDeviceName = device.name
-        activitySystemImage = device.systemImage
-        activityBatteryPercent = state == .disconnected ? nil : device.batteryPercent
-        activityState = state
-        activityLabel = state == .disconnected ? "\(device.name) disconnected" : device.activityLabel
-        justChangedRecently = true
-        let work = DispatchWorkItem { [weak self] in self?.showNextEvent() }
-        hideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 7, execute: work)
     }
 
     nonisolated static func systemImage(for name: String, category: String = "") -> String {
@@ -160,18 +74,10 @@ final class BluetoothMonitor: ObservableObject {
     }
 
 #if DEBUG
-    func setPreviewChange(deviceName: String, batteryPercent: Int? = nil,
-                          state: BluetoothActivityState = .connected) {
-        let levels = BluetoothBatteryLevels(main: batteryPercent)
-        let device = BluetoothDeviceSnapshot(id: "preview", name: deviceName, batteryPercent: batteryPercent, batteryLevels: levels)
-        setPreviewDevices(state == .disconnected ? [] : [device])
-        pendingEvents = [(device, state)]
-        showNextEvent()
-    }
     func setPreviewDevices(_ devices: [BluetoothDeviceSnapshot]) { connectedDevices = devices }
 #endif
 
-    deinit { timer?.invalidate(); hideWorkItem?.cancel() }
+    deinit { timer?.invalidate() }
 }
 
 /// Mutable cache is confined to BluetoothMonitor.queryQueue. Keeping it outside

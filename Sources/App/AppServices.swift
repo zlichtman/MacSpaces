@@ -45,7 +45,7 @@ final class AppServices {
             (nook.showPowerLiveActivity || nookWidgets.contains(.battery))
         needsPower ? powerMonitor.start() : powerMonitor.stop()
 
-        let needsBluetooth = app.notchEnabled && (nook.showBluetoothLiveActivity || nookWidgets.contains(.battery))
+        let needsBluetooth = app.notchEnabled && nookWidgets.contains(.battery)
         needsBluetooth ? bluetooth.start() : bluetooth.stop()
 
         let needsSystemActivity = app.notchEnabled && (

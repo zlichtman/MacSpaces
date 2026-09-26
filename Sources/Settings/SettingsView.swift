@@ -285,6 +285,7 @@ private struct AppearanceSettingsPane: View {
             NookSizeSettings()
             SettingsCard("Motion", systemImage: "sparkles") {
                 Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
+                Toggle("Trackpad haptics", isOn: $theme.hapticsEnabled)
             }
         }
     }

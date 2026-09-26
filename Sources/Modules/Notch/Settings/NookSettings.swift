@@ -213,10 +213,6 @@ final class NookSettings: ObservableObject {
         didSet { defaults.set(showTimerLiveActivity, forKey: Keys.showTimerLiveActivity) }
     }
 
-    @Published var showBluetoothLiveActivity: Bool {
-        didSet { defaults.set(showBluetoothLiveActivity, forKey: Keys.showBluetoothLiveActivity) }
-    }
-
     @Published var showVolumeLiveActivity: Bool {
         didSet { defaults.set(showVolumeLiveActivity, forKey: Keys.showVolumeLiveActivity) }
     }
@@ -283,7 +279,6 @@ final class NookSettings: ObservableObject {
         static let showMusicLiveActivity = "showMusicLiveActivity"
         static let showPowerLiveActivity = "showPowerLiveActivity"
         static let showTimerLiveActivity = "showTimerLiveActivity"
-        static let showBluetoothLiveActivity = "showBluetoothLiveActivity"
         static let showVolumeLiveActivity = "showVolumeLiveActivity"
         static let showBrightnessLiveActivity = "showBrightnessLiveActivity"
         static let showKeyboardBrightnessLiveActivity = "showKeyboardBrightnessLiveActivity"
@@ -319,7 +314,6 @@ final class NookSettings: ObservableObject {
             Keys.showMusicLiveActivity: true,
             Keys.showPowerLiveActivity: true,
             Keys.showTimerLiveActivity: true,
-            Keys.showBluetoothLiveActivity: true,
             Keys.showVolumeLiveActivity: true,
             Keys.showBrightnessLiveActivity: true,
             Keys.showKeyboardBrightnessLiveActivity: true,
@@ -341,7 +335,6 @@ final class NookSettings: ObservableObject {
         showMusicLiveActivity = defaults.bool(forKey: Keys.showMusicLiveActivity)
         showPowerLiveActivity = defaults.bool(forKey: Keys.showPowerLiveActivity)
         showTimerLiveActivity = defaults.bool(forKey: Keys.showTimerLiveActivity)
-        showBluetoothLiveActivity = defaults.bool(forKey: Keys.showBluetoothLiveActivity)
         showVolumeLiveActivity = defaults.bool(forKey: Keys.showVolumeLiveActivity)
         showBrightnessLiveActivity = defaults.bool(forKey: Keys.showBrightnessLiveActivity)
         showKeyboardBrightnessLiveActivity = defaults.bool(
@@ -515,7 +508,6 @@ final class NookSettings: ObservableObject {
         showMusicLiveActivity = true
         showPowerLiveActivity = true
         showTimerLiveActivity = true
-        showBluetoothLiveActivity = true
         showVolumeLiveActivity = true
         showBrightnessLiveActivity = true
         showKeyboardBrightnessLiveActivity = true

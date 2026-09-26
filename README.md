@@ -24,11 +24,11 @@ macOS 13 or later · Apple silicon and Intel · Signed and notarized · MIT lice
   Notes, Quick Actions, Shortcuts, Battery, Clock and an optional Camera Mirror.
 - Drag to reorder widgets; right-click to move or remove them. Create profiles
   for work, listening or a quieter desktop.
-- Drop files onto the notch to open the Tray, then drag them into another app.
+- Drop files onto the notch to open the Tray, then drag them into another app. Tray
+  tiles show Quick Look previews; right-click to copy, compress, AirDrop or share.
 - Compact live activities for music, timers, power and supported system controls.
 - Battery details for your Mac and connected devices, including separate earbud
   and case readings when macOS reports them. Plugged in and charging are distinct.
-  Device notifications resize to keep names and percentages visible.
 - Settings are organized into General, Widgets, Appearance and Activities.
   Widget access appears with the widgets that need it; About & Updates is separate.
 
@@ -58,9 +58,8 @@ Install Xcode and XcodeGen, then run `make`. `project.yml` is the canonical proj
 
 `make release` builds both architectures, signs with Developer ID, notarizes and
 staples the app and DMG using the `MacSpaces` Keychain profile, then verifies
-Gatekeeper acceptance. MacSpaces keeps one public release, **1.0.0**. Updates
-replace its installer; an internal build number lets the app detect improvements.
-The repository keeps one current snapshot commit. See [AGENTS.md](AGENTS.md) for
-the release workflow.
+Gatekeeper acceptance. The current release is **1.1**. Each version has its own
+`vX.Y` tag and GitHub Release, and an increasing internal build number lets the
+app detect updates. See [AGENTS.md](AGENTS.md) for the release workflow.
 
 Report reproducible problems through [GitHub Issues](https://github.com/zlichtman/MacSpaces/issues).

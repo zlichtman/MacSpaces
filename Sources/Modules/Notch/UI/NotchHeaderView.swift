@@ -3,7 +3,15 @@ import SwiftUI
 /// Tab strip shown at the top of the expanded nook.
 struct NotchHeaderView: View {
     @ObservedObject var viewModel: NotchViewModel
+    // Observed separately so the Tray count follows drops and removals.
+    @ObservedObject private var shelf: ShelfStore
     @ObservedObject private var theme = ThemeStore.shared
+    @Namespace private var tabSelection
+
+    init(viewModel: NotchViewModel) {
+        self.viewModel = viewModel
+        self.shelf = viewModel.shelf
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -57,7 +65,7 @@ struct NotchHeaderView: View {
                         .frame(width: 28, height: 26)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NookIconButtonStyle())
                     .help(
                         viewModel.settings.showTeleprompterBar
                             ? "Hide Teleprompter"
@@ -74,7 +82,7 @@ struct NotchHeaderView: View {
                         .frame(width: 28, height: 26)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NookIconButtonStyle())
                 .help("Nook Settings")
 
                 Button {
@@ -85,7 +93,7 @@ struct NotchHeaderView: View {
                         .frame(width: 28, height: 26)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NookIconButtonStyle())
                 .help("Close Nook")
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -96,12 +104,15 @@ struct NotchHeaderView: View {
 
     private func tabButton(_ tab: NotchTab) -> some View {
         let isSelected = viewModel.selectedTab == tab
+        let trayCount = tab == .tray ? shelf.items.count : 0
         return Button {
-            withAnimation(.easeOut(duration: 0.15)) {
+            guard viewModel.selectedTab != tab else { return }
+            Haptics.tap()
+            withAnimation(Design.spring()) {
                 viewModel.selectedTab = tab
             }
         } label: {
-            Group {
+            HStack(spacing: 4) {
                 if theme.compactControls {
                     Image(systemName: tab.systemImage)
                         .frame(width: 14)
@@ -109,12 +120,34 @@ struct NotchHeaderView: View {
                     Label(tab.title, systemImage: tab.systemImage)
                         .labelStyle(.titleAndIcon)
                 }
+                if trayCount > 0 {
+                    Text("\(trayCount)")
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 14, minHeight: 14)
+                        .background(theme.notch.accent.opacity(isSelected ? 0.45 : 0.25), in: Capsule())
+                        .foregroundStyle(Color.primary)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
                 .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary.opacity(0.72))
+                .background {
+                    // One pill slides between tabs instead of only the
+                    // label weight changing.
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                            .matchedGeometryEffect(id: "selectedTab", in: tabSelection)
+                    }
+                }
+                .contentShape(Capsule())
+                .animation(Design.spring(), value: trayCount)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PremiumPressButtonStyle())
+        .help(trayCount > 0 ? "\(tab.title) · \(trayCount) \(trayCount == 1 ? "item" : "items")" : tab.title)
     }
 }

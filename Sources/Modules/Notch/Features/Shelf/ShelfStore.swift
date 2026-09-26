@@ -1,4 +1,5 @@
 import AppKit
+import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -16,6 +17,21 @@ struct ShelfItem: Identifiable, Equatable {
     var icon: NSImage {
         NSWorkspace.shared.icon(forFile: url.path)
     }
+
+    /// Finder-style kind and size, e.g. "PDF document · 2.4 MB".
+    var details: String {
+        let values = try? url.resourceValues(forKeys: [
+            .localizedTypeDescriptionKey, .fileSizeKey, .isDirectoryKey
+        ])
+        var parts: [String] = []
+        if let kind = values?.localizedTypeDescription {
+            parts.append(kind)
+        }
+        if values?.isDirectory != true, let size = values?.fileSize {
+            parts.append(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// Holds files dropped onto the notch. Security-scoped bookmarks make the
@@ -24,6 +40,11 @@ struct ShelfItem: Identifiable, Equatable {
 final class ShelfStore: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var selectedItemID: UUID?
+    /// Quick Look previews for images, PDFs, video and documents. Items
+    /// without one (folders, apps) keep their Finder icon.
+    @Published private(set) var thumbnails: [UUID: NSImage] = [:]
+    /// Items with a file operation, such as compression, still running.
+    @Published private(set) var busyItemIDs: Set<UUID> = []
 
     /// URLs whose security-scoped access was successfully started on load.
     /// Each needs a balancing stop when its item leaves the tray.
@@ -53,6 +74,7 @@ final class ShelfStore: ObservableObject {
 
     init() {
         load()
+        items.forEach(requestThumbnail(for:))
     }
 
     deinit {
@@ -78,10 +100,22 @@ final class ShelfStore: ObservableObject {
     }
 
     func add(url: URL) {
-        guard !items.contains(where: { $0.url == url }) else { return }
-        withAnimation(Design.spring()) {
-            items.insert(ShelfItem(url: url), at: 0)
+        // Dropping a file that is already staged brings it back to the front
+        // instead of silently ignoring the drop.
+        if let index = items.firstIndex(where: { $0.url == url }) {
+            guard index != 0 else { return }
+            withAnimation(Design.spring()) {
+                let existing = items.remove(at: index)
+                items.insert(existing, at: 0)
+            }
+            save()
+            return
         }
+        let item = ShelfItem(url: url)
+        withAnimation(Design.spring()) {
+            items.insert(item, at: 0)
+        }
+        requestThumbnail(for: item)
         save()
     }
 
@@ -90,8 +124,28 @@ final class ShelfStore: ObservableObject {
             items.removeAll { $0.id == item.id }
         }
         stopSecurityScopedAccess(for: item.url)
+        thumbnails[item.id] = nil
         if selectedItemID == item.id {
             selectedItemID = nil
+        }
+        save()
+    }
+
+    /// Files moved or deleted since they were staged leave the tray rather
+    /// than lingering as dead tiles.
+    func pruneMissingItems() {
+        let missing = items.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
+        guard !missing.isEmpty else { return }
+        let missingIDs = Set(missing.map(\.id))
+        withAnimation(Design.spring()) {
+            items.removeAll { missingIDs.contains($0.id) }
+        }
+        for item in missing {
+            stopSecurityScopedAccess(for: item.url)
+            thumbnails[item.id] = nil
+        }
+        if let selectedItemID, missingIDs.contains(selectedItemID) {
+            self.selectedItemID = nil
         }
         save()
     }
@@ -112,6 +166,7 @@ final class ShelfStore: ObservableObject {
             url.stopAccessingSecurityScopedResource()
         }
         securityScopedURLs.removeAll()
+        thumbnails.removeAll()
         selectedItemID = nil
         save()
     }
@@ -144,6 +199,81 @@ final class ShelfStore: ObservableObject {
     func airDrop(_ item: ShelfItem) {
         guard let service = NSSharingService(named: .sendViaAirDrop) else { return }
         service.perform(withItems: [item.url])
+    }
+
+    /// Puts the file itself on the pasteboard so it pastes into Finder,
+    /// Mail or Messages like a Finder copy.
+    func copyToPasteboard(_ item: ShelfItem) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([item.url as NSURL])
+    }
+
+    /// Creates a Finder-compatible ZIP next to the original (or in Downloads
+    /// when that folder is read-only) and stages the archive in the tray.
+    func compress(_ item: ShelfItem) {
+        guard !busyItemIDs.contains(item.id) else { return }
+        let source = item.url
+        let sourceFolder = source.deletingLastPathComponent()
+        let folder = FileManager.default.isWritableFile(atPath: sourceFolder.path)
+            ? sourceFolder
+            : FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let destination = Self.availableURL(
+            folder.appendingPathComponent(source.lastPathComponent).appendingPathExtension("zip")
+        )
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", source.path, destination.path]
+        let itemID = item.id
+        process.terminationHandler = { [weak self] process in
+            let succeeded = process.terminationStatus == 0
+            Task { @MainActor [weak self, itemID, destination, succeeded] in
+                guard let self else { return }
+                self.busyItemIDs.remove(itemID)
+                guard succeeded else { return }
+                self.add(url: destination)
+                self.selectedItemID = self.items.first(where: { $0.url == destination })?.id
+            }
+        }
+        do {
+            try process.run()
+            busyItemIDs.insert(itemID)
+        } catch {
+            return
+        }
+    }
+
+    /// "Name.zip", then "Name 2.zip", matching Finder's collision naming.
+    private static func availableURL(_ proposed: URL) -> URL {
+        let folder = proposed.deletingLastPathComponent()
+        let base = proposed.deletingPathExtension().lastPathComponent
+        let pathExtension = proposed.pathExtension
+        var candidate = proposed
+        var index = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = folder.appendingPathComponent("\(base) \(index)").appendingPathExtension(pathExtension)
+            index += 1
+        }
+        return candidate
+    }
+
+    private func requestThumbnail(for item: ShelfItem) {
+        guard thumbnails[item.id] == nil else { return }
+        let request = QLThumbnailGenerator.Request(
+            fileAt: item.url,
+            size: CGSize(width: 44, height: 44),
+            scale: NSScreen.main?.backingScaleFactor ?? 2,
+            representationTypes: .thumbnail
+        )
+        let itemID = item.id
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, _ in
+            guard let image = representation?.nsImage else { return }
+            Task { @MainActor [weak self, itemID, image] in
+                guard let self, self.items.contains(where: { $0.id == itemID }) else { return }
+                self.thumbnails[itemID] = image
+            }
+        }
     }
 
     private func load() {

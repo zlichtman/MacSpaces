@@ -27,27 +27,7 @@ enum DeviceRegressionChecks {
         precondition(report["aabbcc445566"]!.batteries.primary == nil)
         precondition(report.count == 2 && report["aabbcc445566"]!.name == "Keyboard")
         precondition(BluetoothBatteryReport.parse(Data("invalid".utf8)).isEmpty)
-        func device(_ level: Int?) -> BluetoothDeviceSnapshot {
-            BluetoothDeviceSnapshot(id: "test", name: "Studio headphones", batteryPercent: level)
-        }
-        let gradual = BluetoothMonitor()
-        gradual.apply([device(80)], announce: false)
-        for value in [79, 78, 77, 76] { gradual.apply([device(value)], announce: true) }
-        precondition(!gradual.justChangedRecently)
-        gradual.apply([device(75)], announce: true)
-        precondition(gradual.justChangedRecently && gradual.activityBatteryPercent == 75 && gradual.activityState == .battery)
-        gradual.stop()
-        let delayed = BluetoothMonitor()
-        delayed.apply([device(nil)], announce: false)
-        delayed.apply([device(64)], announce: true)
-        precondition(delayed.justChangedRecently && delayed.activityBatteryPercent == 64)
-        delayed.stop()
-        let disconnect = BluetoothMonitor()
-        disconnect.apply([device(60)], announce: false)
-        disconnect.apply([], announce: true)
-        precondition(disconnect.activityState == .disconnected && disconnect.activityBatteryPercent == nil)
-        disconnect.stop()
-        print("Power source semantics, Bluetooth component parsing, gradual battery changes and disconnect checks passed")
+        print("Power source semantics and Bluetooth component parsing checks passed")
     }
 }
 #endif

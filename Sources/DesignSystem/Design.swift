@@ -22,7 +22,78 @@ enum Design {
 
     @MainActor
     static var hoverAnimation: Animation {
-        ThemeStore.shared.reduceMotion ? .linear(duration: 0.01) : .easeOut(duration: 0.16)
+        ThemeStore.shared.reduceMotion ? .linear(duration: 0.01) : .spring(response: 0.24, dampingFraction: 0.8)
+    }
+
+    /// Opening settles without overshoot so the large surface never appears
+    /// to keep rolling once its content is interactive.
+    @MainActor
+    static var openAnimation: Animation {
+        ThemeStore.shared.reduceMotion
+            ? .easeOut(duration: 0.16)
+            : .spring(response: 0.34, dampingFraction: 0.9)
+    }
+
+    /// Closing is quicker and critically damped: the surface tucks back into
+    /// the camera housing without bouncing past it.
+    @MainActor
+    static var closeAnimation: Animation {
+        ThemeStore.shared.reduceMotion
+            ? .easeOut(duration: 0.14)
+            : .spring(response: 0.28, dampingFraction: 0.97)
+    }
+}
+
+/// Blur, scale and fade together read as depth rather than a flat crossfade.
+private struct DepthTransitionEffect: ViewModifier {
+    let blur: CGFloat
+    let scale: CGFloat
+    let opacity: Double
+    let anchor: UnitPoint
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale, anchor: anchor)
+            .blur(radius: blur)
+            .opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    /// Content entering or leaving the Nook. Reduce Motion keeps a plain fade.
+    @MainActor
+    static func nookDepth(
+        blur: CGFloat = 6,
+        scale: CGFloat = 0.94,
+        anchor: UnitPoint = .top
+    ) -> AnyTransition {
+        guard !ThemeStore.shared.reduceMotion else { return .opacity }
+        return .modifier(
+            active: DepthTransitionEffect(blur: blur, scale: scale, opacity: 0, anchor: anchor),
+            identity: DepthTransitionEffect(blur: 0, scale: 1, opacity: 1, anchor: anchor)
+        )
+    }
+}
+
+/// Light trackpad feedback for direct manipulation. Force Touch trackpads
+/// only play it while a finger rests on them, so it never fires unexpectedly.
+@MainActor
+enum Haptics {
+    private static var lastPerformedAt = Date.distantPast
+
+    /// Selection, opening and small confirmations.
+    static func tap() { perform(.levelChange) }
+
+    /// Files landing in the Tray and removals.
+    static func drop() { perform(.generic) }
+
+    private static func perform(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
+        guard ThemeStore.shared.hapticsEnabled else { return }
+        // Hover and drag callbacks can fire in bursts; one pulse is enough.
+        let now = Date()
+        guard now.timeIntervalSince(lastPerformedAt) > 0.12 else { return }
+        lastPerformedAt = now
+        NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .now)
     }
 }
 
@@ -53,7 +124,45 @@ struct PremiumPressButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .opacity(configuration.isPressed ? 0.78 : 1)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+            // A quick snap down and a softer settle back feel physical.
+            .animation(
+                configuration.isPressed
+                    ? .spring(response: 0.14, dampingFraction: 0.82)
+                    : .spring(response: 0.24, dampingFraction: 0.74),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// Icon controls in the Nook header: a soft capsule appears on hover and the
+/// glyph brightens, then presses in with the shared spring.
+struct NookIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        NookIconButtonBody(configuration: configuration)
+    }
+}
+
+private struct NookIconButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var isHovering = false
+
+    var body: some View {
+        configuration.label
+            .foregroundStyle(isHovering ? Color.primary : Color.secondary)
+            .background {
+                Capsule()
+                    .fill(Color.white.opacity(isHovering ? 0.1 : 0))
+                    .padding(.vertical, 1)
+            }
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .animation(
+                configuration.isPressed
+                    ? .spring(response: 0.14, dampingFraction: 0.82)
+                    : .spring(response: 0.24, dampingFraction: 0.74),
+                value: configuration.isPressed
+            )
+            .animation(.spring(response: 0.24, dampingFraction: 0.8), value: isHovering)
+            .onHover { isHovering = $0 }
     }
 }
 

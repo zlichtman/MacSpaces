@@ -54,10 +54,10 @@ final class NotchManager {
             .sink { [weak self] _ in self?.rebuildWindows() }
             .store(in: &cancellables)
 
-        // Live device names can need more room than a small widget profile.
+        // Live activity labels can need more room than a small widget profile.
         // Resize the host window too, otherwise SwiftUI draws beyond its bounds.
         Publishers.MergeMany([
-            bluetoothMonitor.objectWillChange, powerMonitor.objectWillChange,
+            powerMonitor.objectWillChange,
             nowPlaying.objectWillChange, timerService.objectWillChange,
             systemActivityMonitor.objectWillChange,
         ])

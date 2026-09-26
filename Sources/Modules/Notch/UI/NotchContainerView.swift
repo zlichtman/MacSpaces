@@ -10,7 +10,6 @@ struct NotchContainerView: View {
     @ObservedObject var nowPlaying: NowPlayingController
     @ObservedObject var powerMonitor: PowerSourceMonitor
     @ObservedObject var timerService: TimerService
-    @ObservedObject var bluetoothMonitor: BluetoothMonitor
     @ObservedObject var systemActivityMonitor: SystemActivityMonitor
     @ObservedObject private var theme = ThemeStore.shared
 
@@ -20,14 +19,18 @@ struct NotchContainerView: View {
         self.nowPlaying = viewModel.nowPlaying
         self.powerMonitor = viewModel.powerMonitor
         self.timerService = viewModel.timerService
-        self.bluetoothMonitor = viewModel.bluetoothMonitor
         self.systemActivityMonitor = viewModel.systemActivityMonitor
     }
 
     private var isExpanded: Bool { viewModel.state == .expanded }
 
     private var surfaceSize: CGSize {
-        isExpanded ? viewModel.expandedSize : viewModel.collapsedSize
+        if isExpanded { return viewModel.expandedSize }
+        let collapsed = viewModel.collapsedSize
+        // A small hover peek below and beside the camera housing signals
+        // that the notch is interactive before it opens.
+        guard viewModel.isHoveringCollapsed, !theme.reduceMotion else { return collapsed }
+        return CGSize(width: collapsed.width + 12, height: collapsed.height + 4)
     }
 
     var body: some View {
@@ -87,11 +90,13 @@ struct NotchContainerView: View {
                 }
                 .overlay(alignment: .top) {
                     if isExpanded {
+                        // Content settles in from the camera as the surface
+                        // opens, instead of fading in place over the morph.
                         expandedContent
-                            .transition(.opacity)
+                            .transition(.nookDepth())
                     } else {
                         collapsedContent
-                            .transition(.opacity)
+                            .transition(.nookDepth(blur: 4, scale: 1, anchor: .center))
                     }
                 }
                 .clipShape(NotchShape(topCornerRadius: isExpanded ? 12 : 6,
@@ -115,7 +120,8 @@ struct NotchContainerView: View {
             if !isExpanded { viewModel.expand() }
         }
         .onDrop(of: [UTType.fileURL], delegate: NotchDropDelegate(viewModel: viewModel))
-        .animation(theme.reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: isExpanded)
+        .animation(isExpanded ? Design.openAnimation : Design.closeAnimation, value: isExpanded)
+        .animation(Design.hoverAnimation, value: viewModel.isHoveringCollapsed)
         .environment(\.colorScheme, theme.notch.colorScheme)
         .tint(theme.notch.accent)
         .foregroundStyle(theme.notchPreset == .forest ? (Color(themeHex: "#D3C6AA") ?? .primary) : .primary)
@@ -181,8 +187,6 @@ struct NotchContainerView: View {
     @ViewBuilder
     private func pairedActivity(_ activity: CollapsedActivityKind) -> some View {
         switch activity {
-        case .bluetooth:
-            BluetoothActivityIdentityView(monitor: bluetoothMonitor, compact: true)
         case .power:
             PowerActivityIconView(monitor: powerMonitor, compact: true)
         default:
@@ -203,8 +207,6 @@ struct NotchContainerView: View {
                 .foregroundStyle(.orange)
         case .music:
             MusicActivityArtworkView(nowPlaying: viewModel.nowPlaying)
-        case .bluetooth:
-            BluetoothActivityIdentityView(monitor: bluetoothMonitor)
         case .power:
             PowerActivityIconView(monitor: viewModel.powerMonitor)
         case .system:
@@ -227,8 +229,6 @@ struct NotchContainerView: View {
                 .foregroundStyle(.orange)
         case .music:
             AudioSpectrumView(isPlaying: nowPlaying.info.isPlaying)
-        case .bluetooth:
-            BluetoothActivityValueView(monitor: bluetoothMonitor)
         case .power:
             PowerActivityLabelView(monitor: powerMonitor)
         case .system:
@@ -271,8 +271,10 @@ struct NotchContainerView: View {
                 switch viewModel.selectedTab {
                 case .nook:
                     NookDashboardView(viewModel: viewModel)
+                        .transition(.nookDepth(blur: 4, scale: 0.98, anchor: .center))
                 case .tray:
                     ShelfView(store: viewModel.shelf, isDropTargeted: $viewModel.isDropTargeted)
+                        .transition(.nookDepth(blur: 4, scale: 0.98, anchor: .center))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -309,6 +311,7 @@ private struct NotchDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         viewModel.isDropTargeted = false
+        Haptics.drop()
         viewModel.expand(to: .tray)
         return viewModel.shelf.handleDrop(providers: info.itemProviders(for: [.fileURL]))
     }

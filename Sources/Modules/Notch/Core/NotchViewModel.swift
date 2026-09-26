@@ -31,7 +31,6 @@ enum NotchTab: String, CaseIterable, Identifiable {
 enum CollapsedActivityKind: Hashable {
     case timer
     case music
-    case bluetooth
     case power
     case system
 }
@@ -42,6 +41,9 @@ final class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .collapsed
     @Published var selectedTab: NotchTab = .nook
     @Published var isDropTargeted = false
+    /// The pointer rests on the closed notch; it grows slightly to show it is
+    /// about to open, before the hover delay elapses.
+    @Published private(set) var isHoveringCollapsed = false
     var isWeatherDetailsPresented = false
     var isDeviceDetailsPresented = false
 
@@ -149,16 +151,8 @@ final class NotchViewModel: ObservableObject {
         let standardWidth =
             baseWidth + (hasStackedPair || isAwaitingPotentialMusicPair ? 26 : 0)
 
-        // Device cards reserve readable name/status space and never extend
-        // beyond the display. Only the device name may truncate.
+        // Power cards never extend beyond the display.
         let maximumLane = max(0, (availableWidth - geometry.width - 32) / 2)
-        if activities.contains(.bluetooth) {
-            let name = bluetoothMonitor.lastChangedDeviceName ?? "Bluetooth device"
-            let nameWidth = ceil((name as NSString).size(withAttributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold)
-            ]).width)
-            return min(maximumLane, max(170, min(230, nameWidth + 62)))
-        }
         if activities.contains(.power) { return min(maximumLane, 150) }
 
         let dynamicLabel: String?
@@ -191,7 +185,6 @@ final class NotchViewModel: ObservableObject {
         // or brightness change is never hidden behind persistent media/timer
         // activities. The highest-value persistent activity fills lane two.
         if settings.showPowerLiveActivity && powerMonitor.justChangedRecently { kinds.append(.power) }
-        if settings.showBluetoothLiveActivity && bluetoothMonitor.justChangedRecently { kinds.append(.bluetooth) }
         if systemActivityMonitor.justChangedRecently { kinds.append(.system) }
         if settings.showTimerLiveActivity && timerService.isRunning { kinds.append(.timer) }
         if settings.showMusicLiveActivity && nowPlaying.info.isPlaying { kinds.append(.music) }
@@ -202,6 +195,8 @@ final class NotchViewModel: ObservableObject {
     func hoverChanged(_ hovering: Bool) {
         collapseWorkItem?.cancel()
         isPointerInside = hovering
+        let peeks = hovering && state == .collapsed
+        if isHoveringCollapsed != peeks { isHoveringCollapsed = peeks }
 
         if hovering {
             guard state == .collapsed else { return }
@@ -254,17 +249,21 @@ final class NotchViewModel: ObservableObject {
     func expand(to tab: NotchTab? = nil) {
         collapseWorkItem?.cancel()
         if let tab { selectedTab = tab }
-        // Opening is a direct pointer response. A short ease-out reaches the
-        // final geometry in one pass; a spring made the large surface appear
-        // to keep rolling out after its content was already interactive.
-        withAnimation(.easeOut(duration: 0.18)) {
+        isHoveringCollapsed = false
+        guard state != .expanded else { return }
+        Haptics.tap()
+        // Opening is a direct pointer response. The spring is damped enough to
+        // settle in one pass, so the surface never keeps rolling out after
+        // its content is already interactive.
+        withAnimation(Design.openAnimation) {
             state = .expanded
         }
     }
 
     func collapse() {
         collapseWorkItem?.cancel()
-        withAnimation(.easeOut(duration: 0.15)) {
+        isHoveringCollapsed = false
+        withAnimation(Design.closeAnimation) {
             state = .collapsed
         }
     }
@@ -291,6 +290,7 @@ final class NotchViewModel: ObservableObject {
     func acceptFileDrop(_ urls: [URL]) {
         collapseWorkItem?.cancel()
         isDropTargeted = false
+        Haptics.drop()
         expand(to: .tray)
         urls.forEach(shelf.add(url:))
     }

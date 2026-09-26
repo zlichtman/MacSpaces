@@ -103,63 +103,6 @@ struct BatteryGaugeView: View {
     }
 }
 
-struct BluetoothActivityIdentityView: View {
-    @ObservedObject var monitor: BluetoothMonitor
-    @ObservedObject private var theme = ThemeStore.shared
-    var compact = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: monitor.activitySystemImage)
-                .font(.system(size: 21, weight: .medium))
-                .foregroundStyle(theme.notch.accent)
-                .frame(width: 27)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(monitor.lastChangedDeviceName ?? "Bluetooth device")
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1).truncationMode(.middle)
-                if compact {
-                    HStack(spacing: 6) {
-                        Text(monitor.activityState.title)
-                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-                        if let level = monitor.activityBatteryPercent {
-                            Text("\(level)%").font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(level <= 20 ? Color.orange : .primary)
-                                .monospacedDigit().fixedSize()
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .help("\(monitor.activityLabel) · \(monitor.activityState.title)")
-        .accessibilityElement(children: .combine)
-    }
-}
-
-struct BluetoothActivityValueView: View {
-    @ObservedObject var monitor: BluetoothMonitor
-    @ObservedObject private var theme = ThemeStore.shared
-
-    var body: some View {
-        VStack(spacing: 1) {
-            if let level = monitor.activityBatteryPercent {
-                HStack(spacing: 7) {
-                    BatteryGaugeView(level: level, tint: level <= 20 ? .orange : theme.notch.accent)
-                    Text("\(level)%").font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                }
-            }
-            Text(monitor.activityState.title)
-                .font(.system(size: monitor.activityBatteryPercent == nil ? 11 : 9, weight: .medium))
-                .foregroundStyle(monitor.activityState == .disconnected ? .primary : .secondary)
-        }
-        .lineLimit(1)
-        .frame(maxWidth: .infinity)
-        .accessibilityLabel("\(monitor.activityLabel), \(monitor.activityState.title)")
-    }
-}
-
 /// Rounded album artwork thumbnail (left side of the notch while music plays).
 struct MusicActivityArtworkView: View {
     @ObservedObject var nowPlaying: NowPlayingController

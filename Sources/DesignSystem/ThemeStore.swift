@@ -352,6 +352,9 @@ final class ThemeStore: ObservableObject {
     @Published var compactControls: Bool {
         didSet { defaults.set(compactControls, forKey: Keys.compactControls) }
     }
+    @Published var hapticsEnabled: Bool {
+        didSet { defaults.set(hapticsEnabled, forKey: Keys.haptics) }
+    }
     /// The in-app opt-in. Read `reduceMotion` rather than this, so the system
     /// accessibility setting is honoured even when the app toggle is off.
     @Published var reduceMotionPreference: Bool {
@@ -394,6 +397,7 @@ final class ThemeStore: ObservableObject {
         static let gradientSurfaces = "theme.gradientSurfaces"
         static let compactControls = "theme.compactControls"
         static let reduceMotion = "theme.reduceMotion"
+        static let haptics = "theme.haptics"
     }
 
     private let defaults = UserDefaults.standard
@@ -424,6 +428,7 @@ final class ThemeStore: ObservableObject {
             Keys.gradientSurfaces: true,
             Keys.compactControls: false,
             Keys.reduceMotion: false,
+            Keys.haptics: true,
             Keys.widgetVisualStyle: WidgetVisualStyle.studio.rawValue,
         ])
 
@@ -478,6 +483,7 @@ final class ThemeStore: ObservableObject {
         gradientSurfaces = defaults.bool(forKey: Keys.gradientSurfaces)
         compactControls = defaults.bool(forKey: Keys.compactControls)
         reduceMotionPreference = defaults.bool(forKey: Keys.reduceMotion)
+        hapticsEnabled = defaults.bool(forKey: Keys.haptics)
         widgetVisualStyle = .studio
 
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -555,6 +561,7 @@ final class ThemeStore: ObservableObject {
         gradientSurfaces = true
         compactControls = false
         reduceMotionPreference = false
+        hapticsEnabled = true
         widgetVisualStyle = .studio
     }
 

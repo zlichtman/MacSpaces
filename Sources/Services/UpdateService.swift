@@ -152,9 +152,9 @@ final class UpdateService: ObservableObject {
                     return
                 }
 
-                let version = release.tagName
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-                guard version == ReleaseRevision.version,
+                // The public version comes from the tag; the downloaded app
+                // must match it and the build marker before it can install.
+                guard let version = ReleaseRevision.version(fromTag: release.tagName),
                       let build = ReleaseRevision.build(in: release.body) else {
                     self.status = .failed("Update information is incomplete")
                     return

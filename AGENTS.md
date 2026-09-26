@@ -1,6 +1,6 @@
 # MacSpaces engineering guide
 
-MacSpaces 1.0.0 is a native macOS menu-bar app focused on the Nook. A panel opens
+MacSpaces 1.1 is a native macOS menu-bar app focused on the Nook. A panel opens
 from the physical camera notch, or a synthetic notch on other displays. It has
 widget profiles, a file Tray, compact live activities, optional Mirror, and lyrics.
 
@@ -16,6 +16,8 @@ widget profiles, a file Tray, compact live activities, optional Mirror, and lyri
   persistence and view factory. New cases must have titles, symbols and sizing.
 - `Sources/DesignSystem`: shared appearance and palette persistence. Only the
   modern widget style is selectable; old style identifiers decode to it.
+  `Design` owns the motion tokens (open/close/hover springs, `nookDepth`
+  transitions) and optional trackpad `Haptics`; all of them honor Reduce Motion.
 - `Sources/Settings`: General (enable, startup, behavior, displays), Widgets
   (profiles, visual editor, lyrics, relevant access), Appearance (palette, size,
   motion), Activities, and About & Updates. Permissions stay with enabled widgets.
@@ -32,9 +34,9 @@ Service demand follows enabled Nook widgets. Clipboard history is memory-only
 and excludes concealed/transient pasteboard types. Weather starts only when its
 widget is enabled; hover details keep the Nook open. Weather uses Open-Meteo and
 an IP location fallback. Lyrics use their provider, and updates use GitHub.
-Battery widgets also keep Bluetooth monitoring active. Connection and battery
-feedback precede routine system-control feedback. The host window tracks live
-activity size, including long accessory names on displays without a notch.
+Only the Battery widget starts Bluetooth monitoring. There are no Bluetooth
+connection or device-battery live activities; power feedback precedes routine
+system-control feedback, and the host window tracks live activity size.
 Bluetooth uses paired-device reads plus the macOS connected-device report when
 IOBluetooth omits accessories. Battery reads are cached for 30 seconds; connection
 fallback refreshes every four seconds. Unknown values stay unknown, and earbud
@@ -56,31 +58,31 @@ arm64/x86_64 Release build, Developer ID signature with hardened runtime, app
 notarization, stapling, DMG creation, DMG notarization and stapling, then mounted
 app signature, architecture and Gatekeeper verification. Keychain profile:
 `MacSpaces`. Never commit credentials, generated projects or release artifacts.
-### Permanent release policy
+### Release policy
 
-The owner requires **one commit and one release, always named 1.0.0**. This is an
-explicit repository convention, including future work:
+The owner moved from the fixed 1.0.0 snapshot to versioned releases with 1.1.
 
-- Keep `main` as one root commit. Amend that commit; do not append commits, merge
-  PRs, or leave additional public branches. Keep the commit title `MacSpaces 1.0.0`.
-- Keep exactly one tag, `v1.0.0`, and one GitHub Release, `MacSpaces 1.0.0`.
-  Replace that release's `MacSpaces.dmg`; never create a second release or tag.
-- Keep `CFBundleShortVersionString` at `1.0.0`. Increment the internal integer
-  `CFBundleVersion` for each replacement so existing installs can detect updates.
-- Before replacing history or an installer, save a local recovery bundle and a
-  copy of the previous release outside the repository. Never publish backup refs.
-- Record the current remote main/tag SHAs; push the amended main and moved tag
-  with explicit `--force-with-lease=<ref>:<expected-sha>` checks. If a lease fails,
-  inspect the new remote work and preserve it before proceeding.
+- `main` is normal history: add commits; do not rewrite or force-push it. The
+  `v1.0.0` tag and release stay as they are. Commit titles for a release are
+  `MacSpaces X.Y`.
+- Each public version gets one tag, `vX.Y`, at its commit on `main`, and one
+  GitHub Release, `MacSpaces X.Y`, with `MacSpaces.dmg`. A replacement installer
+  for the same version updates that release instead of creating another.
+- `CFBundleShortVersionString` is the public version. Increment the internal
+  integer `CFBundleVersion` for every published installer; it must exceed every
+  published release's build so existing installs detect the update.
 - Run `Scripts/check-release-policy.sh`, the updater regression checks and the
-  build. Check CI on the exact replacement commit, then `make release` and
-  `Scripts/publish-release.sh`. The publisher only updates the existing release.
-- `RELEASE_NOTES.md` describes the current app, not a list of past versions. The
+  build. Check CI on the exact release commit, push the `vX.Y` tag there, then
+  run `make release` and `Scripts/publish-release.sh`, which creates or updates
+  that version's release.
+- `RELEASE_NOTES.md` describes the current version and names it in bold. The
   publisher adds one hidden `macspaces-build` marker for update detection.
 
-The updater reads releases/latest, compares internal build numbers, and checks
-the downloaded app's version, build, bundle identifier and signing-team identity.
-Do not remove build metadata: the public version intentionally remains fixed.
+The updater reads releases/latest, takes the public version from its tag,
+compares internal build numbers, and checks the downloaded app's version, build,
+bundle identifier and signing-team identity. 1.0.0 builds only accepted a
+`v1.0.0` tag, so they cannot update to 1.1 automatically; users install 1.1 once
+from the release page.
 
 CI builds Release on macos-14. A passing local build is insufficient: check the
 GitHub build on the commit being released. Use explicit captures in nested actor
@@ -94,8 +96,8 @@ The helper requires the separate bundle identifier, uses synthetic data, and
 never reads real camera or clipboard content. Artwork paths are explicit in
 WebsiteDemoCapture. Only safe, populated native Nook views are exported.
 
-DeviceRegressionChecks verifies power semantics, component battery parsing,
-gradual battery changes and connection events. MACSPACES_DEVICE_AUDIT=1 performs
+DeviceRegressionChecks verifies power semantics and component battery parsing.
+MACSPACES_DEVICE_AUDIT=1 performs
 a read-only local-device check; it logs counts only, never names or addresses.
 InteractionRegressionChecks verifies proportional fill, stacked sizing, new
 widget persistence, the Nook-only sidebar and legacy style migration. Native

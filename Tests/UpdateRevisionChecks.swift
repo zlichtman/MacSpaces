@@ -5,7 +5,12 @@ struct UpdateRevisionChecks {
     static func main() {
         let body = "Current release notes.\n\n<!-- macspaces-build:6 -->\n"
         let revision = ReleaseRevision.build(in: body)!
-        precondition(ReleaseRevision.version == "1.0.0")
+        precondition(ReleaseRevision.version(fromTag: "v1.1") == "1.1")
+        precondition(ReleaseRevision.version(fromTag: "v1.0.0") == "1.0.0")
+        precondition(ReleaseRevision.version(fromTag: "2.0") == "2.0")
+        for invalid in ["", "v", "v1.", "v.1", "v1.1.1.1", "v1.1-beta", "latest", "v1..1", "v12345.0"] {
+            precondition(ReleaseRevision.version(fromTag: invalid) == nil, invalid)
+        }
         precondition(ReleaseRevision.isNewer(revision, than: 5), "Same public version must still update")
         precondition(!ReleaseRevision.isNewer(revision, than: 6), "Don't reinstall the current build")
         precondition(!ReleaseRevision.isNewer(revision, than: 7), "Don't downgrade a newer build")
@@ -16,6 +21,6 @@ struct UpdateRevisionChecks {
                         "<!-- macspaces-build:6 -->\n<!-- macspaces-build:7 -->"] {
             precondition(ReleaseRevision.build(in: invalid) == nil)
         }
-        print("Update checks passed: replacement, current, older and malformed releases")
+        print("Update checks passed: versions, replacement, current, older and malformed releases")
     }
 }

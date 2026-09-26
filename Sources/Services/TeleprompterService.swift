@@ -24,6 +24,12 @@ enum TeleprompterSource: String {
 /// session and exposes only the current/upcoming line to the Nook.
 @MainActor
 final class TeleprompterService: ObservableObject {
+    /// Identifies requests to lyrics and caption providers with the running version.
+    nonisolated static let userAgent: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
+        return "MacSpaces \(version) (https://github.com/zlichtman/MacSpaces)"
+    }()
+
     private struct TimedLine: Equatable {
         let start: TimeInterval
         let end: TimeInterval?
@@ -198,7 +204,7 @@ final class TeleprompterService: ObservableObject {
 
         var request = URLRequest(url: url)
         request.setValue(
-            "MacSpaces 1.0.0 (https://github.com/zlichtman/MacSpaces)",
+            Self.userAgent,
             forHTTPHeaderField: "User-Agent"
         )
         dataTask = teleprompterURLSession.dataTask(with: request) {
@@ -274,7 +280,7 @@ final class TeleprompterService: ObservableObject {
 
         var request = URLRequest(url: url)
         request.setValue(
-            "MacSpaces 1.0.0 (https://github.com/zlichtman/MacSpaces)",
+            Self.userAgent,
             forHTTPHeaderField: "User-Agent"
         )
         dataTask = teleprompterURLSession.dataTask(with: request) {
@@ -338,7 +344,7 @@ final class TeleprompterService: ObservableObject {
 
             var captionRequest = URLRequest(url: captionURL)
             captionRequest.setValue(
-                "MacSpaces 1.0.0 (https://github.com/zlichtman/MacSpaces)",
+                Self.userAgent,
                 forHTTPHeaderField: "User-Agent"
             )
             let captionTask = teleprompterURLSession.dataTask(

@@ -175,13 +175,12 @@ struct ActivitiesSettingsPane: View {
     var body: some View {
         SettingsPage(title: "Activities", subtitle: "Choose what appears beside the closed notch.") {
             SettingsCard("Live activities", systemImage: "waveform.path.ecg") {
-                Text("Music, timers & devices")
+                Text("Music, timers & power")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Toggle("Now Playing", isOn: $settings.showMusicLiveActivity)
                 Toggle("Running timer", isOn: $settings.showTimerLiveActivity)
                 Toggle("Power and low-battery alerts", isOn: $settings.showPowerLiveActivity)
-                Toggle("Bluetooth and AirPods battery", isOn: $settings.showBluetoothLiveActivity)
 
                 Divider()
 
