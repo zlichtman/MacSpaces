@@ -246,6 +246,12 @@ final class NookSettings: ObservableObject {
 
     /// Applies only while the Nook is closed. The expanded Nook deliberately
     /// leaves all trackpad gestures to its widgets and horizontal scroller.
+    /// Dragging files onto the closed notch opens the Tray. When off, files can
+    /// still be dropped into an already open Tray.
+    @Published var openTrayOnFileDrag: Bool {
+        didSet { defaults.set(openTrayOnFileDrag, forKey: Keys.openTrayOnFileDrag) }
+    }
+
     @Published var scrollGesturesEnabled: Bool {
         didSet { defaults.set(scrollGesturesEnabled, forKey: Keys.scrollGesturesEnabled) }
     }
@@ -286,6 +292,7 @@ final class NookSettings: ObservableObject {
         static let showFocusLiveActivity = "showFocusLiveActivity"
         static let showTeleprompterBar = "showTeleprompterBar"
         static let scrollGesturesEnabled = "scrollGesturesEnabled"
+        static let openTrayOnFileDrag = "openTrayOnFileDrag"
         static let expandedWidth = "nookExpandedWidth"
         static let expandedHeight = "nookExpandedHeight"
         static let fitWidthToProfile = "nookFitWidthToProfile"
@@ -321,6 +328,7 @@ final class NookSettings: ObservableObject {
             Keys.showFocusLiveActivity: true,
             Keys.showTeleprompterBar: false,
             Keys.scrollGesturesEnabled: true,
+            Keys.openTrayOnFileDrag: true,
             Keys.expandedWidth: 860.0,
             Keys.expandedHeight: 250.0,
             Keys.fitWidthToProfile: true,
@@ -344,6 +352,7 @@ final class NookSettings: ObservableObject {
         showFocusLiveActivity = defaults.bool(forKey: Keys.showFocusLiveActivity)
         showTeleprompterBar = defaults.bool(forKey: Keys.showTeleprompterBar)
         scrollGesturesEnabled = defaults.bool(forKey: Keys.scrollGesturesEnabled)
+        openTrayOnFileDrag = defaults.bool(forKey: Keys.openTrayOnFileDrag)
         expandedWidth = defaults.double(forKey: Keys.expandedWidth)
         expandedHeight = defaults.double(forKey: Keys.expandedHeight)
         fitWidthToProfile = defaults.bool(forKey: Keys.fitWidthToProfile)
@@ -515,6 +524,7 @@ final class NookSettings: ObservableObject {
         showFocusLiveActivity = true
         showTeleprompterBar = false
         scrollGesturesEnabled = true
+        openTrayOnFileDrag = true
         expandedWidth = 860
         expandedHeight = 250
         fitWidthToProfile = true

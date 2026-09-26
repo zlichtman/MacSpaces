@@ -30,6 +30,8 @@ Nook columns grow proportionally to fill available width. Adjacent compact
 widgets can stack. Oversized profiles retain useful tile widths and scroll.
 Panel heights fill the configured size. Header controls stay outside the camera
 cutout; narrow displays place the header below it. Empty profiles keep Add Widget.
+File drags open Tray only after pausing in a small zone around the closed notch
+(General → "Open Tray when dragging files to the notch" turns this off).
 
 Service demand follows enabled Nook widgets. Clipboard history is memory-only
 and excludes concealed/transient pasteboard types. Weather starts only when its

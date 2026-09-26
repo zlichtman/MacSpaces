@@ -301,6 +301,11 @@ struct NotchContainerView: View {
 private struct NotchDropDelegate: DropDelegate {
     let viewModel: NotchViewModel
 
+    /// With drag-to-open off, the closed notch ignores file drags entirely.
+    func validateDrop(info: DropInfo) -> Bool {
+        viewModel.state == .expanded || viewModel.settings.openTrayOnFileDrag
+    }
+
     func dropEntered(info: DropInfo) {
         viewModel.fileDragEntered()
     }

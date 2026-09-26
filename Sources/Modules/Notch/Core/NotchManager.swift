@@ -145,12 +145,14 @@ final class NotchManager {
                 if viewModel.state == .expanded {
                     return viewModel.expandedSize
                 }
-                // Catch Finder drags well below the macOS top-edge gesture.
-                // The extra room is drag-only; ordinary pointer events still
-                // pass through to the app underneath.
+                guard viewModel.settings.openTrayOnFileDrag else { return .zero }
+                // A small drag-only margin around the closed notch. Drags that
+                // merely pass along the top of the screen stay with the app
+                // underneath; ordinary pointer events always pass through.
+                let collapsed = viewModel.collapsedSize
                 return CGSize(
-                    width: min(viewModel.expandedSize.width, 760),
-                    height: 148
+                    width: collapsed.width + 60,
+                    height: collapsed.height + 28
                 )
             },
             fileDragEntered: { [weak viewModel] in

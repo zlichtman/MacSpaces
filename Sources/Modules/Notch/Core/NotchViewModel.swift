@@ -99,6 +99,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     private var collapseWorkItem: DispatchWorkItem?
+    private var fileDragOpenWorkItem: DispatchWorkItem?
     private var scrollAccumulator: CGFloat = 0
     private var isPointerInside = false
 
@@ -272,23 +273,36 @@ final class NotchViewModel: ObservableObject {
         state == .collapsed ? expand() : collapse()
     }
 
-    /// A Finder drag reached the invisible landing zone below the notch.
-    /// Open Tray before the pointer reaches macOS's top-edge window gesture.
+    /// A Finder drag reached the small landing zone around the notch. The
+    /// Tray opens only if the drag pauses there, so files dragged along the
+    /// top of the screen do not pop the Nook open on the way past.
     func fileDragEntered() {
         collapseWorkItem?.cancel()
+        fileDragOpenWorkItem?.cancel()
         isDropTargeted = true
-        if state == .collapsed || selectedTab != .tray {
-            expand(to: .tray)
+        if state == .expanded {
+            if selectedTab != .tray { expand(to: .tray) }
+            return
         }
+        guard settings.openTrayOnFileDrag else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isDropTargeted else { return }
+            self.expand(to: .tray)
+        }
+        fileDragOpenWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
     func fileDragExited() {
+        fileDragOpenWorkItem?.cancel()
+        fileDragOpenWorkItem = nil
         isDropTargeted = false
         hoverChanged(false)
     }
 
     func acceptFileDrop(_ urls: [URL]) {
         collapseWorkItem?.cancel()
+        fileDragOpenWorkItem?.cancel()
         isDropTargeted = false
         Haptics.drop()
         expand(to: .tray)

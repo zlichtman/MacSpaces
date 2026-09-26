@@ -25,7 +25,8 @@ struct GeneralSettingsPane: View {
                 }
 
                 Toggle("Open by scrolling down on the notch", isOn: $settings.scrollGesturesEnabled)
-                Text("Click the notch to open it at any time. Scrolling inside an open Nook stays with the widgets.")
+                Toggle("Open Tray when dragging files to the notch", isOn: $settings.openTrayOnFileDrag)
+                Text("Click the notch to open it at any time. Scrolling inside an open Nook stays with the widgets. A file drag opens Tray only after it pauses at the notch.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
