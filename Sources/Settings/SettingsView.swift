@@ -18,7 +18,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .widgets: return "Widgets"
         case .appearance: return "Appearance"
         case .activities: return "Activities"
-        case .about: return "About & Updates"
+        case .about: return "About"
         }
     }
 
@@ -420,12 +420,10 @@ private struct PermissionRow: View {
 }
 
 private struct AboutSettingsPane: View {
-    @ObservedObject private var updater = UpdateService.shared
-
     var body: some View {
         SettingsPage(
             title: "About MacSpaces",
-            subtitle: "Version information and software updates."
+            subtitle: "Version and project information."
         ) {
             VStack(spacing: 14) {
                 MacSpacesMark(size: 82)
@@ -446,39 +444,55 @@ private struct AboutSettingsPane: View {
                 Text("Built with SwiftUI and AppKit. Personal data stays on-device unless a widget explicitly connects to a network service.")
                     .foregroundStyle(.secondary)
             }
-
-            SettingsCard("Updates", systemImage: "arrow.triangle.2.circlepath") {
-                Toggle(
-                    "Check for new versions automatically",
-                    isOn: $updater.automaticallyCheckForUpdates
-                )
-                Toggle(
-                    "Download new versions automatically",
-                    isOn: $updater.automaticallyInstallUpdates
-                )
-                .disabled(!updater.automaticallyCheckForUpdates)
-                Text("Updates are fetched from GitHub and verified against the installed app's signature. MacSpaces always asks before quitting to finish an install.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    Text(updater.status.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(updater.actionLabel) {
-                        updater.performPrimaryAction()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(updater.isBusy)
-                }
-            }
-
-
         }
     }
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+}
+
+/// Automatic update preferences and the manual check, shown in General.
+struct SoftwareUpdateCard: View {
+    @ObservedObject private var updater = UpdateService.shared
+
+    var body: some View {
+        SettingsCard("Software updates", systemImage: "arrow.triangle.2.circlepath") {
+            Toggle(
+                "Check for new versions automatically",
+                isOn: $updater.automaticallyCheckForUpdates
+            )
+            Toggle(
+                "Download new versions automatically",
+                isOn: $updater.automaticallyInstallUpdates
+            )
+            .disabled(!updater.automaticallyCheckForUpdates)
+            Text("Updates are fetched from GitHub and verified against the installed app's signature. MacSpaces always asks before quitting to finish an install.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(updater.status.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("MacSpaces \(installedVersion)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Button(updater.actionLabel) {
+                    updater.performPrimaryAction()
+                }
+                .buttonStyle(.bordered)
+                .disabled(updater.isBusy)
+            }
+        }
+    }
+
+    private var installedVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(version) (\($0))" } ?? version
     }
 }
 

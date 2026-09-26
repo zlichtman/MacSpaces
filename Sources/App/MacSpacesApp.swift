@@ -34,7 +34,7 @@ private struct MenuBarMenu: View {
         .keyboardShortcut(",")
 
         Button("Check for Updates…") {
-            SettingsWindowController.shared.show(.about)
+            SettingsWindowController.shared.show(.general)
             UpdateService.shared.check()
         }
 

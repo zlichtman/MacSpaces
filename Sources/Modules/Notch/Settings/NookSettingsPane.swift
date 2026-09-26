@@ -7,7 +7,7 @@ struct GeneralSettingsPane: View {
     @State private var showingResetConfirmation = false
 
     var body: some View {
-        SettingsPage(title: "General", subtitle: "Choose when and where your Nook appears.") {
+        SettingsPage(title: "General", subtitle: "Choose when and where your Nook appears, and how MacSpaces updates.") {
             SettingsCard("MacSpaces", systemImage: "power") {
                 Toggle("Enable Nook", isOn: $app.notchEnabled)
                 Toggle("Launch at login", isOn: $app.launchAtLogin)
@@ -34,6 +34,7 @@ struct GeneralSettingsPane: View {
                 DisplayTargetPicker(mode: $settings.displayMode,
                     selectedIDs: $settings.selectedDisplayIDs, preferBuiltIn: true)
             }
+            SoftwareUpdateCard()
             HStack {
                 Button("Reset all Nook settings…", role: .destructive) {
                     showingResetConfirmation = true

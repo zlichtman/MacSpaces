@@ -18,9 +18,9 @@ widget profiles, a file Tray, compact live activities, optional Mirror, and lyri
   modern widget style is selectable; old style identifiers decode to it.
   `Design` owns the motion tokens (open/close/hover springs, `nookDepth`
   transitions) and optional trackpad `Haptics`; all of them honor Reduce Motion.
-- `Sources/Settings`: General (enable, startup, behavior, displays), Widgets
-  (profiles, visual editor, lyrics, relevant access), Appearance (palette, size,
-  motion), Activities, and About & Updates. Permissions stay with enabled widgets.
+- `Sources/Settings`: General (enable, startup, behavior, displays, software
+  updates), Widgets (profiles, visual editor, lyrics, relevant access),
+  Appearance (palette, size, motion), Activities, and About. Permissions stay with enabled widgets.
   Settings remember the current destination; Nook shortcuts open the relevant page.
 - `Sources/Services`: media, weather, calendar, clipboard, timers and related tools.
 - `Sources/Debug`: isolated demo rendering and regression assertions.
