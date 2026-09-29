@@ -14,21 +14,8 @@ struct NookBatteryWidget: View {
 
     var body: some View {
         Button { showingDetails.toggle() } label: {
-            VStack(alignment: compact ? .leading : .center, spacing: compact ? 5 : 9) {
-                if compact {
-                    HStack(spacing: 7) {
-                        BatteryGaugeView(level: level, charging: monitor.isCharging, tint: tint, width: 25)
-                        Text(value).font(.system(size: 16, weight: .semibold)).monospacedDigit().lineLimit(1)
-                    }
-                } else {
-                    BatteryGaugeView(level: level, charging: monitor.isCharging, tint: tint, width: 44)
-                    Text(value).font(.system(size: 25, weight: .semibold)).monospacedDigit().lineLimit(1)
-                }
-                Text(monitor.statusLabel).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-                if !bluetooth.connectedDevices.isEmpty {
-                    Text("\(bluetooth.connectedDevices.count) devices  ›")
-                        .font(.system(size: 9, weight: .medium)).foregroundStyle(theme.notch.accent)
-                }
+            Group {
+                if monitor.hasReading && !monitor.hasBattery { desktopBody } else { batteryBody }
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,6 +30,52 @@ struct NookBatteryWidget: View {
         }
         .onChange(of: showingDetails, perform: onDetailsChanged)
         .onDisappear { onDetailsChanged(false) }
+    }
+
+    /// Desktop Macs have no internal battery; accessories are the useful reading.
+    private var desktopBody: some View {
+        let devices = bluetooth.connectedDevices.filter { $0.batteryPercent != nil }
+        return VStack(alignment: .leading, spacing: compact ? 4 : 7) {
+            if devices.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: "powerplug.fill").foregroundStyle(theme.notch.accent)
+                    Text("On power").font(.system(size: compact ? 12 : 14, weight: .semibold))
+                }
+                Text("Connected accessories appear here").font(.system(size: 9)).foregroundStyle(.secondary)
+            } else {
+                ForEach(devices.prefix(compact ? 1 : 3)) { device in
+                    HStack(spacing: 7) {
+                        Image(systemName: device.systemImage).font(.system(size: 12)).frame(width: 16)
+                        Text(device.name).font(.system(size: 10, weight: .medium)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        if let level = device.batteryPercent {
+                            BatteryGaugeView(level: level, charging: false, tint: level <= 20 ? .orange : theme.notch.accent, width: 20)
+                            Text("\(level)%").font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var batteryBody: some View {
+            VStack(alignment: compact ? .leading : .center, spacing: compact ? 5 : 9) {
+                if compact {
+                    HStack(spacing: 7) {
+                        BatteryGaugeView(level: level, charging: monitor.isCharging, tint: tint, width: 25)
+                        Text(value).font(.system(size: 16, weight: .semibold)).monospacedDigit().lineLimit(1)
+                    }
+                } else {
+                    BatteryGaugeView(level: level, charging: monitor.isCharging, tint: tint, width: 44)
+                    Text(value).font(.system(size: 25, weight: .semibold)).monospacedDigit().lineLimit(1)
+                }
+                Text(monitor.statusLabel).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                if !bluetooth.connectedDevices.isEmpty {
+                    Text("\(bluetooth.connectedDevices.count) device\(bluetooth.connectedDevices.count == 1 ? "" : "s")  ›")
+                        .font(.system(size: 9, weight: .medium)).foregroundStyle(theme.notch.accent)
+                }
+            }
     }
 }
 

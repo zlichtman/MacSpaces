@@ -28,6 +28,8 @@ private struct MenuBarMenu: View {
 
         Divider()
 
+        Button("File Baskets…") { BasketWindowController.shared.show() }
+
         Button("Settings…") {
             SettingsWindowController.shared.show()
         }

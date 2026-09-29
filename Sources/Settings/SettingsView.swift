@@ -5,9 +5,10 @@ import EventKit
 import CoreLocation
 import ApplicationServices
 import UserNotifications
+import CoreBluetooth
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case general, widgets, appearance, activities
+    case general, widgets, appearance, permissions, activities
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .widgets: return "Widgets"
         case .appearance: return "Appearance"
+        case .permissions: return "Permissions"
         case .activities: return "Activities"
         }
     }
@@ -25,6 +27,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .widgets: return "square.grid.2x2"
         case .appearance: return "paintpalette"
+        case .permissions: return "hand.raised"
         case .activities: return "waveform.path.ecg"
         }
     }
@@ -122,6 +125,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsPane()
         case .widgets: NookSettingsPane()
         case .appearance: AppearanceSettingsPane()
+        case .permissions: SettingsPage(title: "Permissions", subtitle: "See what each widget can access, and why.") { WidgetAccessSettings() }
         case .activities: ActivitiesSettingsPane()
         }
     }
@@ -215,59 +219,83 @@ private struct AppearanceSettingsPane: View {
     var body: some View {
         SettingsPage(title: "Appearance", subtitle: "Choose a theme. The Nook takes care of its size and styling.") {
             NookThemePicker()
-            SettingsCard("Motion", systemImage: "sparkles") {
-                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
-                Toggle("Trackpad haptics", isOn: $theme.hapticsEnabled)
-            }
         }
     }
 }
 
-/// Access belongs to the enabled widget, rather than a separate settings destination.
+/// Read-only permission status; visiting this page never starts a feature.
+/// Each permission names the widgets that use it, and only permissions that
+/// an enabled widget needs can be flagged as missing.
 struct WidgetAccessSettings: View {
-    @ObservedObject private var settings = NookSettings.shared
     @State private var accessRevision = 0
+    @ObservedObject private var settings = NookSettings.shared
     @MainActor private static let locationManager = CLLocationManager()
 
-    private var needsAccess: Bool {
-        settings.widgets.contains { [.mirror, .calendar, .todos, .media, .weather].contains($0) }
+    private struct AccessItem: Identifiable {
+        let title: String
+        let symbol: String
+        let usedBy: [NookWidgetKind]
+        let status: PermissionState
+        let settingsURL: String
+        var id: String { title }
+    }
+
+    private var enabledKinds: Set<NookWidgetKind> { Set(settings.profiles.flatMap(\.widgets)) }
+
+    private var items: [AccessItem] {
+        [
+            .init(title: "Automation", symbol: "gearshape.2", usedBy: [.media, .quickActions, .notifications], status: .review,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
+            .init(title: "Calendars", symbol: "calendar", usedBy: [.calendar], status: eventStatus(.event),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"),
+            .init(title: "Reminders", symbol: "checklist", usedBy: [.todos], status: eventStatus(.reminder),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"),
+            .init(title: "Camera", symbol: "camera", usedBy: [.mirror], status: mediaStatus(AVCaptureDevice.authorizationStatus(for: .video)),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"),
+            .init(title: "Location", symbol: "location", usedBy: [.weather], status: locationStatus,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"),
+            .init(title: "Bluetooth", symbol: "headphones", usedBy: [.battery], status: bluetoothStatus,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"),
+            .init(title: "Full Disk Access", symbol: "bubble.left.and.bubble.right", usedBy: [.notifications], status: .review,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+        ]
     }
 
     var body: some View {
-        if needsAccess {
-            SettingsCard("Widget access", systemImage: "hand.raised") {
-                Text("Only the widgets in this profile are listed. Access is requested when you use a feature.")
+        let inUse = items.filter { !enabledKinds.isDisjoint(with: $0.usedBy) }
+        let unused = items.filter { enabledKinds.isDisjoint(with: $0.usedBy) }
+        SettingsCard("Used by your widgets", systemImage: "hand.raised") {
+            HStack(alignment: .top) {
+                Text("macOS asks the first time a widget needs access. Nothing here requests access.")
                     .font(.caption).foregroundStyle(.secondary)
-                if settings.widgets.contains(.media) {
-                    PermissionRow(title: "Music & browsers", detail: "Now Playing and lyrics", symbol: "music.note",
-                        status: .review, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-                }
-                if settings.widgets.contains(.weather) {
-                    PermissionRow(title: "Location", detail: "Weather near you; approximate location is used if unavailable", symbol: "location",
-                        status: locationStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
-                }
-                if settings.widgets.contains(.calendar) {
-                    PermissionRow(title: "Calendars", detail: "Your upcoming events", symbol: "calendar",
-                        status: eventStatus(.event), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
-                }
-                if settings.widgets.contains(.todos) {
-                    PermissionRow(title: "Reminders", detail: "Your to-do list", symbol: "checklist",
-                        status: eventStatus(.reminder), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
-                }
-                if settings.widgets.contains(.mirror) {
-                    PermissionRow(title: "Camera", detail: "Mirror preview", symbol: "camera",
-                        status: cameraStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
-                }
+                Spacer()
+                Button("Refresh", systemImage: "arrow.clockwise") { accessRevision += 1 }
+                    .buttonStyle(.borderless)
             }
-            .id(accessRevision)
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                accessRevision += 1
+            if inUse.isEmpty {
+                Text("Your widgets don't need any special access.").font(.system(size: 13)).padding(.vertical, 6)
             }
+            ForEach(inUse) { row($0, inUse: true) }
+        }
+        .id(accessRevision)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in accessRevision += 1 }
+
+        if !unused.isEmpty {
+            SettingsCard("Not used right now", systemImage: "moon.zzz") {
+                Text("These are only needed if you add the widgets listed.").font(.caption).foregroundStyle(.secondary)
+                ForEach(unused) { row($0, inUse: false) }
+            }
+            .id("unused-\(accessRevision)")
         }
     }
 
-    private var cameraStatus: PermissionState {
-        mediaStatus(AVCaptureDevice.authorizationStatus(for: .video))
+    private func row(_ item: AccessItem, inUse: Bool) -> some View {
+        PermissionRow(title: item.title,
+                      detail: "Used by " + ListFormatter.localizedString(byJoining: item.usedBy.map(\.title)),
+                      symbol: item.symbol,
+                      status: inUse ? item.status : (item.status == .granted ? .granted : .notRequested),
+                      settingsURL: item.settingsURL)
+            .opacity(inUse ? 1 : 0.7)
     }
 
     private func mediaStatus(_ status: AVAuthorizationStatus) -> PermissionState {
@@ -286,6 +314,14 @@ struct WidgetAccessSettings: View {
         }
     }
 
+    private var bluetoothStatus: PermissionState {
+        switch CBCentralManager.authorization {
+        case .allowedAlways: return .granted
+        case .notDetermined: return .notRequested
+        default: return .notGranted
+        }
+    }
+
     @MainActor
     private var locationStatus: PermissionState {
         switch Self.locationManager.authorizationStatus {
@@ -296,7 +332,7 @@ struct WidgetAccessSettings: View {
     }
 }
 
-private enum PermissionState: Equatable {
+private enum PermissionState: Hashable {
     case granted
     case notRequested
     case notGranted
@@ -304,10 +340,18 @@ private enum PermissionState: Equatable {
 
     var title: String {
         switch self {
-        case .granted: return "Granted"
-        case .notRequested: return "When Needed"
+        case .granted: return "Allowed"
+        case .notRequested: return "Asks when used"
         case .notGranted: return "Open Settings"
-        case .review: return "Check Access"
+        case .review: return "Review"
+        }
+    }
+
+    var symbol: String? {
+        switch self {
+        case .granted: return "checkmark.circle.fill"
+        case .notGranted: return "exclamationmark.circle.fill"
+        default: return nil
         }
     }
 
@@ -339,13 +383,23 @@ private struct PermissionRow: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button(status.title) {
-                guard let url = URL(string: settingsURL) else { return }
-                NSWorkspace.shared.open(url)
+            if status == .notGranted || status == .review {
+                Button {
+                    guard let url = URL(string: settingsURL) else { return }
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label(status.title, systemImage: status.symbol ?? "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(status.color)
+            } else {
+                HStack(spacing: 4) {
+                    if let symbol = status.symbol { Image(systemName: symbol) }
+                    Text(status.title)
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(status.color)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(status.color)
-            .disabled(status == .granted)
         }
         .padding(.vertical, 3)
     }
@@ -355,35 +409,35 @@ private struct PermissionRow: View {
 struct SoftwareUpdateCard: View {
     @ObservedObject private var updater = UpdateService.shared
 
+    private var isDevelopment: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MacSpacesDevelopmentBuild") as? Bool == true
+    }
     var body: some View {
-        SettingsCard("Software updates", systemImage: "arrow.triangle.2.circlepath") {
-            Toggle(
-                "Check for new versions automatically",
-                isOn: $updater.automaticallyCheckForUpdates
-            )
-            Toggle(
-                "Download new versions automatically",
-                isOn: $updater.automaticallyInstallUpdates
-            )
-            .disabled(!updater.automaticallyCheckForUpdates)
-            Text("Updates are fetched from GitHub and verified against the installed app's signature. MacSpaces always asks before quitting to finish an install.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(updater.status.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("MacSpaces \(installedVersion)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        SettingsCard("Updates", systemImage: "arrow.triangle.2.circlepath") {
+            HStack(spacing: 12) {
+                MacSpacesMark(size: 36)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("MacSpaces \(installedVersion)").font(.system(size: 14, weight: .semibold))
+                    Text(isDevelopment ? "Development build · installed locally" : updater.status.label)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(updater.actionLabel) {
-                    updater.performPrimaryAction()
+                if !isDevelopment {
+                    Button(updater.actionLabel) { updater.performPrimaryAction() }
+                        .buttonStyle(.bordered).disabled(updater.isBusy)
                 }
-                .buttonStyle(.bordered)
-                .disabled(updater.isBusy)
+            }
+            if isDevelopment {
+                Text("Stable updates are paused for this development build.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Divider()
+                Toggle("Check automatically", isOn: $updater.automaticallyCheckForUpdates)
+                if updater.automaticallyCheckForUpdates {
+                    Toggle("Download updates when available", isOn: $updater.automaticallyInstallUpdates)
+                }
+                Text("Updates are signature-verified. MacSpaces asks before restarting to install.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -391,7 +445,9 @@ struct SoftwareUpdateCard: View {
     private var installedVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(version) (\($0))" } ?? version
+        // Versions like 2.32 already end in their build; older ones show it.
+        guard let build, !version.hasSuffix(".\(build)") else { return version }
+        return "\(version) (\(build))"
     }
 }
 

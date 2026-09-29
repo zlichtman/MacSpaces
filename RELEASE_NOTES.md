@@ -1,13 +1,19 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.34 (pre-release)
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.34** is a development build for macOS 26 and Apple Silicon. The stable
+release is 1.14; 2.34 does not replace it and installed 1.x copies are not
+offered it as an update.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+New since 2.33: a smaller Music page (572 × 336) with a 180 pt cover and scaled type and controls.
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **A new layout:** the Nook hangs just below the notch with a separate dock under it. Choose the dock's pages and their order: Music, Calendar, Reminders, Notes, Weather, Timers, Clipboard, System, Coding and Tray.
+- **Music:** the cover beside title, lyrics and controls, a slim seek bar, an album-tinted background, instant play/pause, and artwork that opens the playing app.
+- **Calendar:** year progress and a month grid with coloured event dots beside your day, after Aaron Lichtman's DayDrop. **Weather:** hourly and four-day forecasts with feels-like, wind, humidity and rain.
+- **Widget sizes:** every Home widget can be Small, Medium or Large. Small widgets next to each other stack, so you choose the combinations.
+- **Widget upgrades:** Timer pause and +1 minute, Focus timer controls and lengths, one-tap Keep Awake, labelled Quick Actions with Lock and Display off, Clipboard copies from the tile, recent Notes, Calendar Join buttons for video calls, Reminders you can complete from the tile, a four-day forecast, and a second clock.
+- **Messages and Tsukumo:** reply from the Nook, see new messages (with Full Disk Access), and send quick tasks to Tsukumo.
+- **Settings:** a to-scale Home editor with sizes and options for each widget, and a Permissions page that shows which widget uses each permission.
+- **Motion:** tiles drop out of the notch in sequence, and the notch lights up when you drag a file to it.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Updates are paused in development builds. Download new pre-releases from GitHub
+or run `brew upgrade --cask zlichtman/tap/macspaces@beta`.
