@@ -1,0 +1,76 @@
+import AppKit
+import SwiftUI
+
+// ThemeStore's compatibility style API accepts widget kinds, but these checks
+// exercise appearance independently of widget services or real user data.
+enum NookWidgetKind { case placeholder }
+
+@main struct AppearanceChecks {
+    @MainActor static func main() {
+        _ = NSApplication.shared
+        let suite = "dev.opensource.MacSpaces.AppearanceChecks.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fresh = ThemeStore(defaults: defaults)
+        precondition(fresh.family == .macspaces && fresh.appearanceMode == .system)
+        fresh.selectFamily(.heartable)
+        fresh.appearanceMode = .dark
+        // Registration defaults vanish between launches. A newly selected
+        // family must survive even when no legacy preset was ever saved.
+        defaults.removeVolatileDomain(forName: UserDefaults.registrationDomain)
+        let restored = ThemeStore(defaults: defaults)
+        precondition(restored.family == .heartable && restored.resolvedScheme == .dark)
+        restored.selectFamily(.tsukumo)
+        precondition(restored.appearanceMode == .dark, "Selecting a family must preserve mode")
+        restored.customNotchHex = "#123456"
+        restored.setPreset(.custom, for: .notch)
+        let custom = ThemeStore(defaults: defaults)
+        precondition(custom.family == nil && custom.notchPreset == .custom)
+        precondition(custom.customNotchHex == "#123456")
+        custom.setPreset(.nord, for: .notch)
+        let legacy = ThemeStore(defaults: defaults)
+        precondition(legacy.family == .nord && legacy.notchPreset == .nord)
+        precondition(AppearanceMode.system.scheme(systemIsDark: true) == .dark)
+        precondition(AppearanceMode.system.scheme(systemIsDark: false) == .light)
+        precondition(AppearanceMode.light.scheme(systemIsDark: true) == .light)
+        precondition(AppearanceMode.dark.scheme(systemIsDark: false) == .dark)
+        precondition(ThemeFamily.signature == [.macspaces, .powdermeet, .heartable, .kemosabe, .tsukumo])
+        let catalog = ThemeFamily.signature + ThemeFamily.palettes
+        precondition(Set(catalog).count == catalog.count && Set(catalog) == Set(ThemeFamily.allCases))
+        precondition(ThemeFamily.palettes.contains(.catppuccin) && ThemeFamily.palettes.contains(.everforest))
+        for preset in ThemePreset.allCases {
+            defaults.removePersistentDomain(forName: suite)
+            defaults.set(preset.rawValue, forKey: "theme.notchPreset")
+            defaults.set("#123456", forKey: "theme.customNotchHex")
+            defaults.set("#AB2345", forKey: "theme.customAccentHex")
+            defaults.set(1, forKey: "theme.schemaVersion")
+            let migrated = ThemeStore(defaults: defaults)
+            precondition(migrated.notchPreset == preset, "Never overwrite saved IDs")
+            precondition(migrated.customNotchHex == "#123456" && migrated.customAccentHex == "#AB2345")
+            precondition(migrated.family == ThemeFamily(legacy: preset), "Legacy catalog migration failed")
+            if preset != .custom && preset != .frosted { precondition(migrated.appearanceMode == .dark) }
+        }
+        for family in ThemeFamily.allCases {
+            for scheme in [ColorScheme.light, .dark] {
+                let palette = family.palette(scheme)
+                for surface in [palette.background, palette.surface] {
+                    let ratio = contrast(palette.foreground, surface)
+                    precondition(ratio >= 4.5, "\(family.title) text contrast: \(ratio)")
+                }
+            }
+        }
+        print("Appearance checks passed: family/mode persistence, legacy and custom preservation, system resolution, and text contrast.")
+    }
+    static func contrast(_ a: String, _ b: String) -> Double {
+        func luminance(_ hex: String) -> Double {
+            let rgb = UInt32(hex, radix: 16)!
+            let values = [16, 8, 0].map { shift -> Double in
+                let c = Double((rgb >> shift) & 255) / 255
+                return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+            }
+            return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722
+        }
+        let x = luminance(a), y = luminance(b)
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+}
