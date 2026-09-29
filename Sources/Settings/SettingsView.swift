@@ -1,0 +1,426 @@
+import SwiftUI
+import AppKit
+import AVFoundation
+import EventKit
+import CoreLocation
+import ApplicationServices
+import UserNotifications
+
+enum SettingsDestination: String, CaseIterable, Identifiable {
+    case general, widgets, appearance, activities
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .widgets: return "Widgets"
+        case .appearance: return "Appearance"
+        case .activities: return "Activities"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .widgets: return "square.grid.2x2"
+        case .appearance: return "paintpalette"
+        case .activities: return "waveform.path.ecg"
+        }
+    }
+}
+
+@MainActor
+final class SettingsNavigationModel: ObservableObject {
+    static let shared = SettingsNavigationModel()
+    @Published var selection: SettingsDestination = .general
+}
+
+struct SettingsView: View {
+    @ObservedObject private var navigation = SettingsNavigationModel.shared
+    @ObservedObject private var appearance = ThemeStore.shared
+
+    var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 214)
+
+            Rectangle()
+                .fill(appearance.notch.border)
+                .frame(width: 1)
+
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(appearance.notch.surface)
+        .foregroundStyle(appearance.nookForeground)
+        .preferredColorScheme(appearance.notch.colorScheme)
+        .tint(appearance.notch.accent)
+        .frame(minWidth: 880, idealWidth: 980, minHeight: 600, idealHeight: 680)
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                MacSpacesMark(size: 34)
+                Text("MacSpaces")
+                    .font(.system(size: 15, weight: .bold))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            VStack(spacing: 3) {
+                ForEach(SettingsDestination.allCases) {
+                    sidebarItem($0)
+                }
+            }
+            .padding(.horizontal, 10)
+
+            Spacer(minLength: 14)
+        }
+        .background(appearance.notch.tile)
+    }
+
+    private func sidebarItem(_ destination: SettingsDestination) -> some View {
+        let selected = navigation.selection == destination
+        return Button {
+            navigation.selection = destination
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: destination.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selected ? appearance.notch.accent : appearance.nookForeground.opacity(0.65))
+                    .frame(width: 19)
+                Text(destination.title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .contentShape(Rectangle())
+            .background(
+                selected ? appearance.notch.selected : Color.clear,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(appearance.notch.accent)
+                        .frame(width: 2, height: 16)
+                        .offset(x: -1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch navigation.selection {
+        case .general: GeneralSettingsPane()
+        case .widgets: NookSettingsPane()
+        case .appearance: AppearanceSettingsPane()
+        case .activities: ActivitiesSettingsPane()
+        }
+    }
+}
+
+struct NookThemePicker: View {
+    @ObservedObject private var theme = ThemeStore.shared
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
+
+    var body: some View {
+        SettingsCard("Theme", systemImage: "paintpalette") {
+            Picker("Appearance", selection: $theme.appearanceMode) {
+                ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
+            }
+            .pickerStyle(.segmented)
+            .disabled(theme.family == nil)
+
+            Text("App themes").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.top, 8)
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(ThemeFamily.signature) { family in familyCard(family) }
+            }
+
+            Text("Palettes").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.top, 12)
+            LazyVGrid(columns: columns, spacing: 16) {
+                ForEach(ThemeFamily.palettes) { family in familyCard(family) }
+            }
+
+            if theme.notchPreset == .custom {
+                Button {
+                    theme.setPreset(.custom, for: .notch)
+                } label: {
+                    HStack {
+                        Label("Saved custom colors", systemImage: "paintbrush.pointed")
+                        Spacer()
+                        if theme.family == nil { Image(systemName: "checkmark") }
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                if theme.family == nil {
+                    Text("Your original custom colors are preserved. Choose a theme to use automatic appearance.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+
+        }
+    }
+
+    private func familyCard(_ family: ThemeFamily) -> some View {
+        let selected = theme.family == family
+        let palette = family.palette(theme.resolvedScheme)
+        return Button { theme.selectFamily(family) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(spacing: 8) {
+                    HStack {
+                        Capsule().fill(palette.color(palette.accent)).frame(width: 22, height: 5)
+                        Spacer()
+                        Circle().fill(palette.color(palette.foreground).opacity(0.25)).frame(width: 5, height: 5)
+                    }
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 6).fill(palette.color(palette.accent).opacity(0.20))
+                        RoundedRectangle(cornerRadius: 6).fill(palette.color(palette.surface))
+                    }.frame(height: 34)
+                }
+                .padding(12)
+                .background(palette.color(palette.background), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(
+                    selected ? theme.notch.accent : Color.primary.opacity(0.10), lineWidth: selected ? 2 : 1))
+                HStack(spacing: 4) {
+                    Text(family.title).font(.system(size: 12, weight: .medium))
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                    Spacer(minLength: 0)
+                    if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.notch.accent) }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(family.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+
+}
+
+private struct AppearanceSettingsPane: View {
+    @ObservedObject private var theme = ThemeStore.shared
+    var body: some View {
+        SettingsPage(title: "Appearance", subtitle: "Choose a theme. The Nook takes care of its size and styling.") {
+            NookThemePicker()
+            SettingsCard("Motion", systemImage: "sparkles") {
+                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
+                Toggle("Trackpad haptics", isOn: $theme.hapticsEnabled)
+            }
+        }
+    }
+}
+
+/// Access belongs to the enabled widget, rather than a separate settings destination.
+struct WidgetAccessSettings: View {
+    @ObservedObject private var settings = NookSettings.shared
+    @State private var accessRevision = 0
+    @MainActor private static let locationManager = CLLocationManager()
+
+    private var needsAccess: Bool {
+        settings.widgets.contains { [.mirror, .calendar, .todos, .media, .weather].contains($0) }
+    }
+
+    var body: some View {
+        if needsAccess {
+            SettingsCard("Widget access", systemImage: "hand.raised") {
+                Text("Only the widgets in this profile are listed. Access is requested when you use a feature.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if settings.widgets.contains(.media) {
+                    PermissionRow(title: "Music & browsers", detail: "Now Playing and lyrics", symbol: "music.note",
+                        status: .review, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+                }
+                if settings.widgets.contains(.weather) {
+                    PermissionRow(title: "Location", detail: "Weather near you; approximate location is used if unavailable", symbol: "location",
+                        status: locationStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+                }
+                if settings.widgets.contains(.calendar) {
+                    PermissionRow(title: "Calendars", detail: "Your upcoming events", symbol: "calendar",
+                        status: eventStatus(.event), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+                }
+                if settings.widgets.contains(.todos) {
+                    PermissionRow(title: "Reminders", detail: "Your to-do list", symbol: "checklist",
+                        status: eventStatus(.reminder), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
+                }
+                if settings.widgets.contains(.mirror) {
+                    PermissionRow(title: "Camera", detail: "Mirror preview", symbol: "camera",
+                        status: cameraStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
+                }
+            }
+            .id(accessRevision)
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                accessRevision += 1
+            }
+        }
+    }
+
+    private var cameraStatus: PermissionState {
+        mediaStatus(AVCaptureDevice.authorizationStatus(for: .video))
+    }
+
+    private func mediaStatus(_ status: AVAuthorizationStatus) -> PermissionState {
+        switch status {
+        case .authorized: return .granted
+        case .notDetermined: return .notRequested
+        default: return .notGranted
+        }
+    }
+
+    private func eventStatus(_ type: EKEntityType) -> PermissionState {
+        switch EKEventStore.authorizationStatus(for: type) {
+        case .fullAccess, .authorized: return .granted
+        case .notDetermined: return .notRequested
+        default: return .notGranted
+        }
+    }
+
+    @MainActor
+    private var locationStatus: PermissionState {
+        switch Self.locationManager.authorizationStatus {
+        case .authorized, .authorizedAlways: return .granted
+        case .notDetermined: return .notRequested
+        default: return .notGranted
+        }
+    }
+}
+
+private enum PermissionState: Equatable {
+    case granted
+    case notRequested
+    case notGranted
+    case review
+
+    var title: String {
+        switch self {
+        case .granted: return "Granted"
+        case .notRequested: return "When Needed"
+        case .notGranted: return "Open Settings"
+        case .review: return "Check Access"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .granted: return .green
+        case .notRequested: return .secondary
+        case .notGranted: return .orange
+        case .review: return AccentChoice.mint.color
+        }
+    }
+}
+
+private struct PermissionRow: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    let status: PermissionState
+    let settingsURL: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(status.title) {
+                guard let url = URL(string: settingsURL) else { return }
+                NSWorkspace.shared.open(url)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(status.color)
+            .disabled(status == .granted)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+/// Automatic update preferences and the manual check, shown in General.
+struct SoftwareUpdateCard: View {
+    @ObservedObject private var updater = UpdateService.shared
+
+    var body: some View {
+        SettingsCard("Software updates", systemImage: "arrow.triangle.2.circlepath") {
+            Toggle(
+                "Check for new versions automatically",
+                isOn: $updater.automaticallyCheckForUpdates
+            )
+            Toggle(
+                "Download new versions automatically",
+                isOn: $updater.automaticallyInstallUpdates
+            )
+            .disabled(!updater.automaticallyCheckForUpdates)
+            Text("Updates are fetched from GitHub and verified against the installed app's signature. MacSpaces always asks before quitting to finish an install.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(updater.status.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("MacSpaces \(installedVersion)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Button(updater.actionLabel) {
+                    updater.performPrimaryAction()
+                }
+                .buttonStyle(.bordered)
+                .disabled(updater.isBusy)
+            }
+        }
+    }
+
+    private var installedVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(version) (\($0))" } ?? version
+    }
+}
+
+struct MacSpacesMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if
+                let url = Bundle.main.url(
+                    forResource: "MacSpacesIcon-master",
+                    withExtension: "png"
+                ),
+                let image = NSImage(contentsOf: url)
+            {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+                    .fill(ThemeStore.shared.accent)
+                    .overlay {
+                        Image(systemName: "square.grid.2x2.fill")
+                            .font(.system(size: size * 0.25, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+            }
+        }
+        .frame(width: size, height: size)
+        .shadow(color: Color.black.opacity(0.22), radius: size * 0.12, y: size * 0.06)
+    }
+}
