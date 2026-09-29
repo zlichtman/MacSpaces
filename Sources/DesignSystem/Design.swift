@@ -37,6 +37,15 @@ enum Design {
             : .spring(response: 0.34, dampingFraction: 0.9)
     }
 
+    /// Tiles and the dock settle with a little give as they fall out of the
+    /// notch, which is what makes the open read as a drop.
+    @MainActor
+    static var dropAnimation: Animation {
+        ThemeStore.shared.reduceMotion
+            ? .easeOut(duration: 0.16)
+            : .spring(response: 0.42, dampingFraction: 0.72)
+    }
+
     /// Closing is quicker and critically damped: the surface tucks back into
     /// the camera housing without bouncing past it.
     @MainActor

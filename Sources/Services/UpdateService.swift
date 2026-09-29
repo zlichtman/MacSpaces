@@ -9,6 +9,7 @@ final class UpdateService: ObservableObject {
 
     enum Status: Equatable {
         case idle
+        case development
         case checking
         case upToDate
         case available(String)
@@ -19,6 +20,7 @@ final class UpdateService: ObservableObject {
         var label: String {
             switch self {
             case .idle: return "Check for Updates"
+            case .development: return "Development build — updates are managed locally"
             case .checking: return "Checking…"
             case .upToDate: return "MacSpaces is up to date"
             case .available: return "A MacSpaces update is available"
@@ -112,7 +114,12 @@ final class UpdateService: ObservableObject {
         automaticallyCheckForUpdates = UserDefaults.standard.bool(forKey: Self.automaticCheckKey)
     }
 
+    private var isDevelopmentBuild: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MacSpacesDevelopmentBuild") as? Bool == true
+    }
+
     func start() {
+        guard !isDevelopmentBuild else { status = .development; return }
         guard automaticallyCheckForUpdates else { return }
         let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
         guard last == nil || Date().timeIntervalSince(last!) > 6 * 60 * 60 else {
@@ -125,6 +132,7 @@ final class UpdateService: ObservableObject {
     }
 
     func check(manual: Bool = true) {
+        guard !isDevelopmentBuild else { status = .development; return }
         guard task == nil else { return }
         status = .checking
         var request = URLRequest(url: endpoint)

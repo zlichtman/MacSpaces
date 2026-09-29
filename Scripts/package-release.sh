@@ -9,7 +9,6 @@ DERIVED_DATA="$STAGING_ROOT/DerivedData"
 PROJECT_BUILD_ROOT="$STAGING_ROOT/Project"
 APP_SOURCE="$DERIVED_DATA/Build/Products/Release/MacSpaces.app"
 APP_STAGED="$STAGING_ROOT/MacSpaces.app"
-DMG_ROOT="$STAGING_ROOT/dmg"
 DMG_STAGED="$STAGING_ROOT/MacSpaces.dmg"
 DMG_PATH="$RELEASES_DIR/MacSpaces.dmg"
 VERIFY_MOUNT="$STAGING_ROOT/verify-mount"
@@ -52,7 +51,7 @@ xcodegen generate \
   -configuration Release \
   -destination 'generic/platform=macOS' \
   -derivedDataPath "$DERIVED_DATA" \
-  ARCHS='arm64 x86_64' \
+  ARCHS=arm64 \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGNING_ALLOWED=NO \
   build
@@ -99,18 +98,8 @@ fi
 codesign --verify --deep --strict --verbose=2 "$APP_STAGED"
 
 package_dmg() {
-  rm -rf "$DMG_ROOT"
-  mkdir -p "$DMG_ROOT"
-  ditto "$APP_STAGED" "$DMG_ROOT/MacSpaces.app"
-  codesign --verify --deep --strict --verbose=2 "$DMG_ROOT/MacSpaces.app"
-  ln -s /Applications "$DMG_ROOT/Applications"
   rm -f "$DMG_STAGED"
-  hdiutil create \
-    -volname "MacSpaces $VERSION" \
-    -srcfolder "$DMG_ROOT" \
-    -ov \
-    -format UDZO \
-    "$DMG_STAGED"
+  "$PROJECT_ROOT/Scripts/build-installer.sh" "$APP_STAGED" "$DMG_STAGED" "MacSpaces $VERSION"
 }
 
 NOTARIZATION_STATUS="Not submitted"
@@ -149,8 +138,8 @@ codesign --verify --strict --verbose=2 "$DMG_STAGED"
 
 # Verify the exact signed payload before publishing its disk image.
 VERIFY_ARCHS="$(lipo -archs "$APP_STAGED/Contents/MacOS/MacSpaces")"
-if [[ "$VERIFY_ARCHS" != *arm64* || "$VERIFY_ARCHS" != *x86_64* ]]; then
-  echo "Packaged executable is not universal: $VERIFY_ARCHS" >&2
+if [[ "$VERIFY_ARCHS" != "arm64" ]]; then
+  echo "Packaged executable is not Apple Silicon only: $VERIFY_ARCHS" >&2
   exit 1
 fi
 
@@ -165,7 +154,7 @@ if [[ "$NOTARIZE" == "1" ]]; then
 fi
 
 # A release is publishable only when the app survives an actual image
-# round-trip with its bundle signature and both architectures intact.
+# round-trip with its bundle signature and Apple Silicon architecture intact.
 mkdir -p "$VERIFY_MOUNT"
 hdiutil attach \
   -nobrowse \
@@ -180,8 +169,8 @@ if [[ "$NOTARIZE" == "1" ]]; then
   spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_STAGED"
 fi
 MOUNTED_ARCHS="$(lipo -archs "$VERIFY_MOUNT/MacSpaces.app/Contents/MacOS/MacSpaces")"
-if [[ "$MOUNTED_ARCHS" != *arm64* || "$MOUNTED_ARCHS" != *x86_64* ]]; then
-  echo "Mounted executable is not universal: $MOUNTED_ARCHS" >&2
+if [[ "$MOUNTED_ARCHS" != "arm64" ]]; then
+  echo "Mounted executable is not Apple Silicon only: $MOUNTED_ARCHS" >&2
   exit 1
 fi
 hdiutil detach "$VERIFY_MOUNT" >/dev/null

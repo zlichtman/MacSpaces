@@ -7,28 +7,67 @@ enum NotchState {
     case expanded
 }
 
-enum NotchTab: String, CaseIterable, Identifiable {
-    case nook
-    case tray
-
+enum NotchTab: String, CaseIterable, Identifiable, Codable {
+    case nook, music, calendar, coding, notes, weather, tray
+    case reminders, timers, clipboard, system
     var id: String { rawValue }
+
+    /// Pages the dock can show, in the order offered in Settings.
+    static let appPages: [NotchTab] = [.music, .calendar, .reminders, .notes, .weather, .timers,
+                                       .clipboard, .system, .coding, .tray]
+    /// The dock before it became configurable.
+    static let defaultDock: [NotchTab] = [.music, .calendar, .coding, .notes, .weather, .tray]
 
     var title: String {
         switch self {
-        case .nook: return "Nook"
+        case .nook: return "Home"
+        case .music: return "Music"
+        case .calendar: return "Calendar"
+        case .coding: return "Coding"
+        case .notes: return "Notes"
+        case .weather: return "Weather"
         case .tray: return "Tray"
+        case .reminders: return "Reminders"
+        case .timers: return "Timers"
+        case .clipboard: return "Clipboard"
+        case .system: return "System"
         }
     }
 
+    var summary: String {
+        switch self {
+        case .nook: return "Your widgets."
+        case .music: return "Full player with lyrics."
+        case .calendar: return "Year progress, month grid and your day."
+        case .coding: return "Recent Codex and Claude token usage."
+        case .notes: return "Your local notes."
+        case .weather: return "Now, the next hours and the next days."
+        case .tray: return "Files waiting between apps."
+        case .reminders: return "Add, see and complete reminders."
+        case .timers: return "A countdown and focus sessions side by side."
+        case .clipboard: return "Search and reuse what you copied."
+        case .system: return "CPU, memory, disk, batteries and Keep Awake."
+        }
+    }
     var systemImage: String {
         switch self {
-        case .nook: return "rectangle.3.group.fill"
+        case .nook: return "square.grid.2x2.fill"
+        case .music: return "music.note"
+        case .calendar: return "calendar"
+        case .coding: return "chevron.left.forwardslash.chevron.right"
+        case .notes: return "note.text"
+        case .weather: return "cloud.sun.fill"
         case .tray: return "tray.full.fill"
+        case .reminders: return "checklist"
+        case .timers: return "timer"
+        case .clipboard: return "doc.on.clipboard"
+        case .system: return "gauge.with.dots.needle.33percent"
         }
     }
 }
 
 enum CollapsedActivityKind: Hashable {
+    case message
     case timer
     case music
     case power
@@ -38,14 +77,28 @@ enum CollapsedActivityKind: Hashable {
 /// Per-screen state machine driving the collapse/expand behaviour of the notch UI.
 @MainActor
 final class NotchViewModel: ObservableObject {
-    @Published var state: NotchState = .collapsed
-    @Published var selectedTab: NotchTab = .nook
+    @Published var state: NotchState = .collapsed { didSet { updateAppPresentation() } }
+    @Published var selectedTab: NotchTab = .nook { didSet { updateAppPresentation() } }
     @Published var isDropTargeted = false
     /// The pointer rests on the closed notch; it grows slightly to show it is
     /// about to open, before the hover delay elapses.
     @Published private(set) var isHoveringCollapsed = false
+    var isQuickReplyEditing = false
+    /// A text field on an app page has focus; typing must not close the Nook.
+    var isPageEditing = false
+    var isQuickTaskEditing = false
     var isWeatherDetailsPresented = false
     var isDeviceDetailsPresented = false
+
+    private let presentationID = UUID()
+    private func updateAppPresentation() {
+        guard Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces" else { return }
+        AppServices.shared.setAppPresentation(id: presentationID, tab: state == .expanded ? selectedTab : nil)
+    }
+    func endAppPresentation() {
+        guard Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces" else { return }
+        AppServices.shared.setAppPresentation(id: presentationID, tab: nil)
+    }
 
     let geometry: NotchGeometry
     let settings: NookSettings
@@ -59,37 +112,49 @@ final class NotchViewModel: ObservableObject {
 
     private let availableWidth: CGFloat
 
+    static let dockHeight: CGFloat = 38
+    static let dockGap: CGFloat = 10
+    /// Space between the camera housing and the open panel, so the panel
+    /// reads as hanging below the notch rather than fused to it.
+    static let cameraGap: CGFloat = 6
+
     /// Content determines size; saved manual dimensions never distort the Nook.
     var expandedSize: CGSize {
         Self.fittedSize(widgets: settings.widgets, tab: selectedTab,
                         geometry: geometry, availableWidth: availableWidth,
-                        showsLyrics: settings.showTeleprompterBar)
+                        showsLyrics: settings.showTeleprompterBar, sizes: settings.widgetSizes)
     }
 
     static func fittedSize(widgets: [NookWidgetKind], tab: NotchTab,
                            geometry: NotchGeometry, availableWidth: CGFloat,
-                           showsLyrics: Bool) -> CGSize {
+                           showsLyrics: Bool, sizes: [NookWidgetKind: NookWidgetSize] = [:]) -> CGSize {
         let maximumWidth = max(1, min(Design.nookMaximumWidth, availableWidth - 48))
-        let headerMinimum = geometry.isHardwareNotch ? geometry.width + 440 : 480
-        let items = widgets.nookLayoutItems()
+        let headerMinimum: CGFloat = 480
+        let tiles = widgets.filter { !$0.isQuickBar }
+        let items = tiles.nookLayoutItems(sizes: sizes)
         let contentWidth = items.reduce(CGFloat.zero) { $0 + $1.width }
             + CGFloat(max(0, items.count - 1)) * 10 + 40
-        let width = min(maximumWidth, max(headerMinimum, contentWidth))
-        let headerExtra = geometry.isHardwareNotch && width < headerMinimum
-            ? max(0, geometry.height - 1) : 0
-        let baseHeight: CGFloat = widgets.isEmpty && tab == .nook ? 170 : Design.nookHeight
+        // Both tabs share the profile width; switching to Tray must not expand the Nook.
+        let width = min(maximumWidth, tab == .nook || tab == .tray ? max(headerMinimum, contentWidth) : 620)
+        let baseHeight: CGFloat
+        switch tab {
+        case .music: baseHeight = 400
+        case .weather, .calendar, .reminders, .clipboard: baseHeight = 346
+        case .timers, .system: baseHeight = 300
+        default: baseHeight = tiles.isEmpty && tab == .nook ? 170 : Design.nookHeight
+        }
         let lyricsHeight: CGFloat = showsLyrics && tab == .nook ? 46 : 0
-        return CGSize(width: width, height: baseHeight + lyricsHeight + headerExtra)
+        return CGSize(width: width, height: baseHeight - (geometry.isHardwareNotch ? 8 - cameraGap : 4) + lyricsHeight + dockHeight + dockGap + (tab == .nook ? CGFloat(widgets.filter(\.isQuickBar).count) * 46 : 0))
     }
 
-    /// A constrained display uses a row below the cutout instead of hiding controls.
+    /// Content always starts below the physical camera; controls live in the dock.
     var expandedHeaderTopInset: CGFloat {
-        (geometry.isHardwareNotch ? 9 : 8) + headerExtraHeight(for: expandedSize.width)
+        geometry.isHardwareNotch ? geometry.height + Self.cameraGap + 12 : 16
     }
 
-    private func headerExtraHeight(for width: CGFloat) -> CGFloat {
-        guard geometry.isHardwareNotch, width < geometry.width + 440 else { return 0 }
-        return max(0, geometry.height + 8 - 9)
+    var expandedPanelSize: CGSize {
+        CGSize(width: expandedSize.width,
+               height: expandedSize.height - Self.dockHeight - Self.dockGap)
     }
 
     private var collapseWorkItem: DispatchWorkItem?
@@ -181,6 +246,7 @@ final class NotchViewModel: ObservableObject {
         // activities. The highest-value persistent activity fills lane two.
         if settings.showPowerLiveActivity && powerMonitor.justChangedRecently { kinds.append(.power) }
         if systemActivityMonitor.justChangedRecently { kinds.append(.system) }
+        if settings.widgets.contains(.notifications) && MessageActivityState.shared.count > 0 { kinds.append(.message) }
         if settings.showTimerLiveActivity && timerService.isRunning { kinds.append(.timer) }
         if settings.showMusicLiveActivity && nowPlaying.info.isPlaying { kinds.append(.music) }
         // The closed Nook remains a glanceable lane, not a compressed toolbar.
@@ -219,7 +285,7 @@ final class NotchViewModel: ObservableObject {
             // Leaving the window is expected while rearranging a card or
             // dragging a file. Keep polling until that interaction ends.
             guard !self.settings.isInteractiveReorderActive,
-                  !self.isDropTargeted, !(self.isWeatherDetailsPresented || self.isDeviceDetailsPresented) else {
+                  !self.isDropTargeted, !self.isQuickReplyEditing, !self.isQuickTaskEditing, !self.isPageEditing, !(self.isWeatherDetailsPresented || self.isDeviceDetailsPresented) else {
                 self.scheduleCollapseCheck(after: 0.14)
                 return
             }
@@ -279,6 +345,7 @@ final class NotchViewModel: ObservableObject {
             return
         }
         guard settings.openTrayOnFileDrag else { return }
+        Haptics.tap()
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isDropTargeted else { return }
             self.expand(to: .tray)
