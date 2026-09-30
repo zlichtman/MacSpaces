@@ -5,9 +5,10 @@ import EventKit
 import CoreLocation
 import ApplicationServices
 import UserNotifications
+import CoreBluetooth
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case general, widgets, appearance, activities
+    case general, widgets, appearance, permissions, activities
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .widgets: return "Widgets"
         case .appearance: return "Appearance"
+        case .permissions: return "Permissions"
         case .activities: return "Activities"
         }
     }
@@ -25,6 +27,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .widgets: return "square.grid.2x2"
         case .appearance: return "paintpalette"
+        case .permissions: return "hand.raised"
         case .activities: return "waveform.path.ecg"
         }
     }
@@ -40,50 +43,59 @@ struct SettingsView: View {
     @ObservedObject private var navigation = SettingsNavigationModel.shared
     @ObservedObject private var appearance = ThemeStore.shared
 
+    /// Always fills the window it's given, pinned to the leading edge. macOS
+    /// window tiling can make a window narrower than its minimum size; the
+    /// sidebar then shrinks to icons instead of the layout overflowing.
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 214)
+        GeometryReader { proxy in
+            let compact = proxy.size.width < 720
+            HStack(spacing: 0) {
+                sidebar(compact: compact)
+                    .frame(width: compact ? 60 : 214)
 
-            Rectangle()
-                .fill(appearance.notch.border)
-                .frame(width: 1)
+                Rectangle()
+                    .fill(appearance.notch.border)
+                    .frame(width: 1)
 
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
         .background(appearance.notch.surface)
         .foregroundStyle(appearance.nookForeground)
         .preferredColorScheme(appearance.notch.colorScheme)
         .tint(appearance.notch.accent)
-        .frame(minWidth: 880, idealWidth: 980, minHeight: 600, idealHeight: 680)
     }
 
-    private var sidebar: some View {
+    private func sidebar(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                MacSpacesMark(size: 34)
-                Text("MacSpaces")
-                    .font(.system(size: 15, weight: .bold))
+                MacSpacesMark(size: compact ? 30 : 34)
+                if !compact {
+                    Text("MacSpaces")
+                        .font(.system(size: 15, weight: .bold))
+                }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, compact ? 15 : 16)
             .padding(.top, 20)
             .padding(.bottom, 16)
 
             VStack(spacing: 3) {
                 ForEach(SettingsDestination.allCases) {
-                    sidebarItem($0)
+                    sidebarItem($0, compact: compact)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, compact ? 8 : 10)
 
             Spacer(minLength: 14)
         }
         .background(appearance.notch.tile)
     }
 
-    private func sidebarItem(_ destination: SettingsDestination) -> some View {
+    private func sidebarItem(_ destination: SettingsDestination, compact: Bool) -> some View {
         let selected = navigation.selection == destination
         return Button {
             navigation.selection = destination
@@ -93,11 +105,14 @@ struct SettingsView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(selected ? appearance.notch.accent : appearance.nookForeground.opacity(0.65))
                     .frame(width: 19)
-                Text(destination.title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .medium))
-                Spacer(minLength: 0)
+                if !compact {
+                    Text(destination.title)
+                        .font(.system(size: 13, weight: selected ? .semibold : .medium))
+                    Spacer(minLength: 0)
+                }
             }
-            .padding(.horizontal, 10)
+            .frame(maxWidth: compact ? .infinity : nil)
+            .padding(.horizontal, compact ? 0 : 10)
             .frame(height: 34)
             .contentShape(Rectangle())
             .background(
@@ -114,6 +129,8 @@ struct SettingsView: View {
             }
         }
         .buttonStyle(.plain)
+        .help(compact ? destination.title : "")
+        .accessibilityLabel(destination.title)
     }
 
     @ViewBuilder
@@ -122,6 +139,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsPane()
         case .widgets: NookSettingsPane()
         case .appearance: AppearanceSettingsPane()
+        case .permissions: SettingsPage(title: "Permissions", subtitle: "See what each widget can access, and why.") { WidgetAccessSettings() }
         case .activities: ActivitiesSettingsPane()
         }
     }
@@ -137,7 +155,7 @@ struct NookThemePicker: View {
                 ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
             }
             .pickerStyle(.segmented)
-            .disabled(theme.family == nil)
+            .disabled(theme.family == nil || theme.family == .custom)
 
             Text("App themes").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 .padding(.top, 8)
@@ -149,6 +167,23 @@ struct NookThemePicker: View {
                 .padding(.top, 12)
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(ThemeFamily.palettes) { family in familyCard(family) }
+                familyCard(.custom)
+            }
+
+            if theme.family == .custom {
+                HStack(spacing: 18) {
+                    ColorPicker("Background", selection: hexBinding(\.customThemeBackground), supportsOpacity: false)
+                    ColorPicker("Accent", selection: hexBinding(\.customThemeAccent), supportsOpacity: false)
+                    Spacer()
+                    Button("Reset") {
+                        theme.customThemeBackground = CustomThemeColors.defaultBackground
+                        theme.customThemeAccent = CustomThemeColors.defaultAccent
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.top, 6)
+                Text("Text and tile colours follow your background, so everything stays readable. Custom uses its own light or dark look instead of the Appearance setting.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             if theme.notchPreset == .custom {
@@ -173,16 +208,35 @@ struct NookThemePicker: View {
         }
     }
 
+    /// Edits one of the Custom theme's hex colours through a ColorPicker.
+    private func hexBinding(_ key: ReferenceWritableKeyPath<ThemeStore, String>) -> Binding<Color> {
+        Binding(
+            get: { Color(themeHex: theme[keyPath: key]) ?? .gray },
+            set: { color in
+                guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return }
+                theme[keyPath: key] = String(format: "%02X%02X%02X",
+                    Int((rgb.redComponent * 255).rounded()), Int((rgb.greenComponent * 255).rounded()),
+                    Int((rgb.blueComponent * 255).rounded()))
+                if theme.family != .custom { theme.selectFamily(.custom) }
+            })
+    }
+
     private func familyCard(_ family: ThemeFamily) -> some View {
         let selected = theme.family == family
-        let palette = family.palette(theme.resolvedScheme)
+        let palette = family.palette(family.fixedScheme ?? theme.resolvedScheme)
         return Button { theme.selectFamily(family) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(spacing: 8) {
                     HStack {
                         Capsule().fill(palette.color(palette.accent)).frame(width: 22, height: 5)
                         Spacer()
-                        Circle().fill(palette.color(palette.foreground).opacity(0.25)).frame(width: 5, height: 5)
+                        if family == .custom {
+                            Image(systemName: "paintpalette.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(palette.color(palette.foreground).opacity(0.7))
+                        } else {
+                            Circle().fill(palette.color(palette.foreground).opacity(0.25)).frame(width: 5, height: 5)
+                        }
                     }
                     HStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 6).fill(palette.color(palette.accent).opacity(0.20))
@@ -215,59 +269,83 @@ private struct AppearanceSettingsPane: View {
     var body: some View {
         SettingsPage(title: "Appearance", subtitle: "Choose a theme. The Nook takes care of its size and styling.") {
             NookThemePicker()
-            SettingsCard("Motion", systemImage: "sparkles") {
-                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
-                Toggle("Trackpad haptics", isOn: $theme.hapticsEnabled)
-            }
         }
     }
 }
 
-/// Access belongs to the enabled widget, rather than a separate settings destination.
+/// Read-only permission status; visiting this page never starts a feature.
+/// Each permission names the widgets that use it, and only permissions that
+/// an enabled widget needs can be flagged as missing.
 struct WidgetAccessSettings: View {
-    @ObservedObject private var settings = NookSettings.shared
     @State private var accessRevision = 0
+    @ObservedObject private var settings = NookSettings.shared
     @MainActor private static let locationManager = CLLocationManager()
 
-    private var needsAccess: Bool {
-        settings.widgets.contains { [.mirror, .calendar, .todos, .media, .weather].contains($0) }
+    private struct AccessItem: Identifiable {
+        let title: String
+        let symbol: String
+        let usedBy: [NookWidgetKind]
+        let status: PermissionState
+        let settingsURL: String
+        var id: String { title }
+    }
+
+    private var enabledKinds: Set<NookWidgetKind> { Set(settings.profiles.flatMap(\.widgets)) }
+
+    private var items: [AccessItem] {
+        [
+            .init(title: "Automation", symbol: "gearshape.2", usedBy: [.media, .quickActions, .notifications], status: .review,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
+            .init(title: "Calendars", symbol: "calendar", usedBy: [.calendar], status: eventStatus(.event),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"),
+            .init(title: "Reminders", symbol: "checklist", usedBy: [.todos], status: eventStatus(.reminder),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"),
+            .init(title: "Camera", symbol: "camera", usedBy: [.mirror], status: mediaStatus(AVCaptureDevice.authorizationStatus(for: .video)),
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"),
+            .init(title: "Location", symbol: "location", usedBy: [.weather], status: locationStatus,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"),
+            .init(title: "Bluetooth", symbol: "headphones", usedBy: [.battery], status: bluetoothStatus,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"),
+            .init(title: "Full Disk Access", symbol: "bubble.left.and.bubble.right", usedBy: [.notifications], status: .review,
+                  settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+        ]
     }
 
     var body: some View {
-        if needsAccess {
-            SettingsCard("Widget access", systemImage: "hand.raised") {
-                Text("Only the widgets in this profile are listed. Access is requested when you use a feature.")
+        let inUse = items.filter { !enabledKinds.isDisjoint(with: $0.usedBy) }
+        let unused = items.filter { enabledKinds.isDisjoint(with: $0.usedBy) }
+        SettingsCard("Used by your widgets", systemImage: "hand.raised") {
+            HStack(alignment: .top) {
+                Text("macOS asks the first time a widget needs access. Nothing here requests access.")
                     .font(.caption).foregroundStyle(.secondary)
-                if settings.widgets.contains(.media) {
-                    PermissionRow(title: "Music & browsers", detail: "Now Playing and lyrics", symbol: "music.note",
-                        status: .review, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-                }
-                if settings.widgets.contains(.weather) {
-                    PermissionRow(title: "Location", detail: "Weather near you; approximate location is used if unavailable", symbol: "location",
-                        status: locationStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
-                }
-                if settings.widgets.contains(.calendar) {
-                    PermissionRow(title: "Calendars", detail: "Your upcoming events", symbol: "calendar",
-                        status: eventStatus(.event), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
-                }
-                if settings.widgets.contains(.todos) {
-                    PermissionRow(title: "Reminders", detail: "Your to-do list", symbol: "checklist",
-                        status: eventStatus(.reminder), settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders")
-                }
-                if settings.widgets.contains(.mirror) {
-                    PermissionRow(title: "Camera", detail: "Mirror preview", symbol: "camera",
-                        status: cameraStatus, settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
-                }
+                Spacer()
+                Button("Refresh", systemImage: "arrow.clockwise") { accessRevision += 1 }
+                    .buttonStyle(.borderless)
             }
-            .id(accessRevision)
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                accessRevision += 1
+            if inUse.isEmpty {
+                Text("Your widgets don't need any special access.").font(.system(size: 13)).padding(.vertical, 6)
             }
+            ForEach(inUse) { row($0, inUse: true) }
+        }
+        .id(accessRevision)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in accessRevision += 1 }
+
+        if !unused.isEmpty {
+            SettingsCard("Not used right now", systemImage: "moon.zzz") {
+                Text("These are only needed if you add the widgets listed.").font(.caption).foregroundStyle(.secondary)
+                ForEach(unused) { row($0, inUse: false) }
+            }
+            .id("unused-\(accessRevision)")
         }
     }
 
-    private var cameraStatus: PermissionState {
-        mediaStatus(AVCaptureDevice.authorizationStatus(for: .video))
+    private func row(_ item: AccessItem, inUse: Bool) -> some View {
+        PermissionRow(title: item.title,
+                      detail: "Used by " + ListFormatter.localizedString(byJoining: item.usedBy.map(\.title)),
+                      symbol: item.symbol,
+                      status: inUse ? item.status : (item.status == .granted ? .granted : .notRequested),
+                      settingsURL: item.settingsURL)
+            .opacity(inUse ? 1 : 0.7)
     }
 
     private func mediaStatus(_ status: AVAuthorizationStatus) -> PermissionState {
@@ -286,6 +364,14 @@ struct WidgetAccessSettings: View {
         }
     }
 
+    private var bluetoothStatus: PermissionState {
+        switch CBCentralManager.authorization {
+        case .allowedAlways: return .granted
+        case .notDetermined: return .notRequested
+        default: return .notGranted
+        }
+    }
+
     @MainActor
     private var locationStatus: PermissionState {
         switch Self.locationManager.authorizationStatus {
@@ -296,7 +382,7 @@ struct WidgetAccessSettings: View {
     }
 }
 
-private enum PermissionState: Equatable {
+private enum PermissionState: Hashable {
     case granted
     case notRequested
     case notGranted
@@ -304,10 +390,18 @@ private enum PermissionState: Equatable {
 
     var title: String {
         switch self {
-        case .granted: return "Granted"
-        case .notRequested: return "When Needed"
+        case .granted: return "Allowed"
+        case .notRequested: return "Asks when used"
         case .notGranted: return "Open Settings"
-        case .review: return "Check Access"
+        case .review: return "Review"
+        }
+    }
+
+    var symbol: String? {
+        switch self {
+        case .granted: return "checkmark.circle.fill"
+        case .notGranted: return "exclamationmark.circle.fill"
+        default: return nil
         }
     }
 
@@ -339,13 +433,23 @@ private struct PermissionRow: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button(status.title) {
-                guard let url = URL(string: settingsURL) else { return }
-                NSWorkspace.shared.open(url)
+            if status == .notGranted || status == .review {
+                Button {
+                    guard let url = URL(string: settingsURL) else { return }
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label(status.title, systemImage: status.symbol ?? "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(status.color)
+            } else {
+                HStack(spacing: 4) {
+                    if let symbol = status.symbol { Image(systemName: symbol) }
+                    Text(status.title)
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(status.color)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(status.color)
-            .disabled(status == .granted)
         }
         .padding(.vertical, 3)
     }
@@ -355,43 +459,38 @@ private struct PermissionRow: View {
 struct SoftwareUpdateCard: View {
     @ObservedObject private var updater = UpdateService.shared
 
+    private var channel: String {
+        updater.followsPrereleases ? "Pre-release · gets every new 2.x build" : "Stable release"
+    }
     var body: some View {
-        SettingsCard("Software updates", systemImage: "arrow.triangle.2.circlepath") {
-            Toggle(
-                "Check for new versions automatically",
-                isOn: $updater.automaticallyCheckForUpdates
-            )
-            Toggle(
-                "Download new versions automatically",
-                isOn: $updater.automaticallyInstallUpdates
-            )
-            .disabled(!updater.automaticallyCheckForUpdates)
-            Text("Updates are fetched from GitHub and verified against the installed app's signature. MacSpaces always asks before quitting to finish an install.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(updater.status.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("MacSpaces \(installedVersion)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        SettingsCard("Updates", systemImage: "arrow.triangle.2.circlepath") {
+            HStack(spacing: 12) {
+                MacSpacesMark(size: 36)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("MacSpaces \(installedVersion)").font(.system(size: 14, weight: .semibold))
+                    Text(updater.status == .idle ? channel : updater.status.label)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(updater.actionLabel) {
-                    updater.performPrimaryAction()
-                }
-                .buttonStyle(.bordered)
-                .disabled(updater.isBusy)
+                Button(updater.actionLabel) { updater.performPrimaryAction() }
+                    .buttonStyle(.bordered).disabled(updater.isBusy)
             }
+            Divider()
+            Toggle("Check automatically", isOn: $updater.automaticallyCheckForUpdates)
+            if updater.automaticallyCheckForUpdates {
+                Toggle("Download updates when available", isOn: $updater.automaticallyInstallUpdates)
+            }
+            Text("Updates come from GitHub and are signature-verified. MacSpaces asks before restarting to install.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     private var installedVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(version) (\($0))" } ?? version
+        // Versions like 2.32 already end in their build; older ones show it.
+        guard let build, !version.hasSuffix(".\(build)") else { return version }
+        return "\(version) (\(build))"
     }
 }
 
@@ -407,9 +506,11 @@ struct MacSpacesMark: View {
                 ),
                 let image = NSImage(contentsOf: url)
             {
+                // The master artwork is full-bleed; round it like a Dock icon.
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.225, style: .continuous))
             } else {
                 RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
                     .fill(ThemeStore.shared.accent)

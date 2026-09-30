@@ -8,9 +8,13 @@ struct GeneralSettingsPane: View {
 
     var body: some View {
         SettingsPage(title: "General", subtitle: "Choose when and where your Nook appears, and how MacSpaces updates.") {
-            SettingsCard("MacSpaces", systemImage: "power") {
+            SettingsCard("Startup", systemImage: "power") {
                 Toggle("Enable Nook", isOn: $app.notchEnabled)
                 Toggle("Launch at login", isOn: $app.launchAtLogin)
+            }
+            SettingsCard("Displays", systemImage: "display") {
+                DisplayTargetPicker(mode: $settings.displayMode,
+                    selectedIDs: $settings.selectedDisplayIDs, preferBuiltIn: true)
             }
             SettingsCard("Open & close", systemImage: "cursorarrow.motionlines") {
                 Toggle("Open on hover", isOn: $settings.expandOnHover)
@@ -26,14 +30,14 @@ struct GeneralSettingsPane: View {
 
                 Toggle("Open by scrolling down on the notch", isOn: $settings.scrollGesturesEnabled)
                 Toggle("Open Tray when dragging files to the notch", isOn: $settings.openTrayOnFileDrag)
-                Text("Click the notch to open it at any time. Scrolling inside an open Nook stays with the widgets. A file drag opens Tray only after it pauses at the notch.")
+                Text("Click the notch to open it. Hover, scroll and file-drag gestures are optional.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            SettingsCard("Displays", systemImage: "display") {
-                DisplayTargetPicker(mode: $settings.displayMode,
-                    selectedIDs: $settings.selectedDisplayIDs, preferBuiltIn: true)
+            SettingsCard("Motion", systemImage: "sparkles") {
+                Toggle("Reduce motion", isOn: $theme.reduceMotionPreference)
+                Toggle("Trackpad haptics", isOn: $theme.hapticsEnabled)
             }
             SoftwareUpdateCard()
             HStack {
@@ -54,83 +58,6 @@ struct GeneralSettingsPane: View {
             }
         } message: {
             Text("This removes widget profiles and restores the default appearance, size, displays and behavior. Your notes and tray files are kept.")
-        }
-    }
-}
-
-struct NookSettingsPane: View {
-    @ObservedObject private var settings = NookSettings.shared
-
-    var body: some View {
-        SettingsPage(title: "Widgets", subtitle: "Arrange your Nook. Save a different setup for each part of your day.") {
-            SettingsCard("Profile", systemImage: "rectangle.3.group") {
-                HStack {
-                    Picker("Active profile", selection: $settings.activeProfileID) {
-                        ForEach(settings.profiles) { profile in
-                            Text(profile.name).tag(profile.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 220)
-
-                    TextField(
-                        "Profile name",
-                        text: Binding(
-                            get: { settings.activeProfile.name },
-                            set: { settings.renameProfile(settings.activeProfile, to: $0) }
-                        )
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    Menu {
-                        Button("New Empty Profile") {
-                            settings.addProfile(named: "Nook \(settings.profiles.count + 1)")
-                        }
-                        Button("Duplicate Current") {
-                            settings.addProfile(
-                                named: "\(settings.activeProfile.name) Copy",
-                                copyingCurrent: true
-                            )
-                        }
-                        Divider()
-                        Button("Delete Current", role: .destructive) {
-                            settings.removeProfile(settings.activeProfile)
-                        }
-                        .disabled(settings.profiles.count == 1)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-            }
-
-            NookWidgetEditor(
-                items: settings.widgets.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
-                choices: NookWidgetKind.allCases.map { WidgetEditorItem(id: $0.rawValue, kind: $0.rawValue, title: $0.title, symbol: $0.systemImage) },
-                toggle: { raw in
-                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
-                    settings.setEnabled(!settings.widgets.contains(kind), for: kind)
-                },
-                remove: { raw in
-                    guard let kind = NookWidgetKind(rawValue: raw) else { return }
-                    settings.setEnabled(false, for: kind)
-                },
-                reorder: { settings.setWidgetOrder($0.compactMap(NookWidgetKind.init(rawValue:))) }
-            )
-
-            SettingsCard("Lyrics & captions", systemImage: "captions.bubble") {
-                Toggle(
-                    "Show lyrics and subtitles below the widgets",
-                    isOn: $settings.showTeleprompterBar
-                )
-                Text("Shows available song lyrics or captions from a supported YouTube tab.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            WidgetAccessSettings()
         }
     }
 }

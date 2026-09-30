@@ -17,6 +17,8 @@ final class AppleScriptProvider: NowPlayingProvider {
         Player(bundleID: "com.spotify.client", appName: "Spotify"),
         Player(bundleID: "com.apple.Music", appName: "Music"),
     ]
+    private let preferredBundleID: String?
+    init(preferredBundleID: String? = nil) { self.preferredBundleID = preferredBundleID }
     private let artworkCache = NSCache<NSString, NSImage>()
     private let musicArtworkCache = NSCache<NSString, NSImage>()
     private let stateLock = NSLock()
@@ -41,6 +43,7 @@ final class AppleScriptProvider: NowPlayingProvider {
 
     private func runningPlayers() -> [Player] {
         players.filter { player in
+            (preferredBundleID == nil || preferredBundleID == player.bundleID) &&
             NSRunningApplication.runningApplications(withBundleIdentifier: player.bundleID).isEmpty == false
         }
     }
@@ -93,7 +96,7 @@ final class AppleScriptProvider: NowPlayingProvider {
         stateLock.lock()
         let bundleID = activePlayerBundleID
         stateLock.unlock()
-        return candidates.first(where: { $0.bundleID == bundleID }) ?? candidates.first
+        return candidates.first(where: { $0.bundleID == bundleID })
     }
 
     private func fetchSnapshot(for player: Player) -> Snapshot? {
@@ -134,12 +137,16 @@ final class AppleScriptProvider: NowPlayingProvider {
         guard !scriptResult.failed, parts.count >= 6 else { return nil }
 
         var info = NowPlayingInfo()
+        info.sourceName = player.appName
+        info.sourceBundleID = player.bundleID
+        info.capabilities = [.playPause, .previous, .next]
         info.isPlaying = parts[0] == "playing"
         info.title = parts[1]
         info.artist = parts[2]
         info.album = parts[3]
         info.duration = Double(parts[4]) ?? 0
         info.elapsed = Double(parts[5]) ?? 0
+        if info.duration.isFinite && info.duration > 0 { info.capabilities.insert(.seek) }
         let artworkURL: URL?
         if parts.count > 6,
            !parts[6].isEmpty,
@@ -191,14 +198,16 @@ final class AppleScriptProvider: NowPlayingProvider {
             guard let artworkData = result.descriptor?.data,
                   let artwork = NSImage(data: artworkData) else { return }
             self?.musicArtworkCache.setObject(artwork, forKey: trackKey as NSString)
+            if let self { NotificationCenter.default.post(name: NowPlayingInfo.artworkDidLoad, object: self) }
         }
     }
 
     private func prefetchArtwork(from url: URL) {
         let pendingKey = url.absoluteString
         guard beginArtworkRequest(pendingKey) else { return }
-        loadArtwork(from: url) { [weak self] _ in
+        loadArtwork(from: url) { [weak self] image in
             self?.endArtworkRequest(pendingKey)
+            if image != nil, let self { NotificationCenter.default.post(name: NowPlayingInfo.artworkDidLoad, object: self) }
         }
     }
 
@@ -232,8 +241,8 @@ final class AppleScriptProvider: NowPlayingProvider {
         .resume()
     }
 
-    func send(_ command: NowPlayingCommand) {
-        guard let player = activePlayer(from: runningPlayers()) else { return }
+    func send(_ command: NowPlayingCommand, completion: @escaping (Result<Void, PlaybackCommandError>) -> Void) {
+        guard let player = activePlayer(from: runningPlayers()) else { completion(.failure(.unavailable)); return }
 
         let verb: String
         switch command {
@@ -244,6 +253,8 @@ final class AppleScriptProvider: NowPlayingProvider {
         }
 
         let source = "tell application \"\(player.appName)\" to \(verb)"
-        AppleScriptRunner.run(source)
+        AppleScriptRunner.run(source) { result in
+            completion(result.failed ? .failure(.rejected) : .success(()))
+        }
     }
 }

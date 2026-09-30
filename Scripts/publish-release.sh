@@ -2,6 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./Scripts/check-release-policy.sh
+python3 - <<'CHECK_DEVELOPMENT'
+import plistlib
+from pathlib import Path
+info = plistlib.loads(Path('Sources/Resources/Info.plist').read_bytes())
+assert not info.get('MacSpacesDevelopmentBuild', False), 'Development builds cannot be published as stable releases.'
+CHECK_DEVELOPMENT
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit the final snapshot before publishing.' >&2; exit 1; }
 repo=zlichtman/MacSpaces
 commit=$(git rev-parse HEAD)

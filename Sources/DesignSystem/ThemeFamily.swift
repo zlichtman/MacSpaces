@@ -26,11 +26,15 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
     case macspaces, powdermeet, heartable, kemosabe, tsukumo
     case tidal, ember, everforest, glass, carbon, acid, cobalt
     case dracula, nord, solarized, gruvbox, tokyoNight, catppuccin, oneDark, monokai
+    case noir, rosePine, kanagawa, ayu
+    /// The user's own background and accent (see `CustomThemeColors`).
+    case custom
 
     /// Shared by Settings and the Nook menu. A theme appears in exactly one collection.
     static let signature: [Self] = [.macspaces, .powdermeet, .heartable, .kemosabe, .tsukumo]
+    /// Named palettes, alphabetical. Custom is offered after them, on its own.
     static var palettes: [Self] {
-        allCases.filter { !signature.contains($0) }.sorted { $0.title < $1.title }
+        allCases.filter { !signature.contains($0) && $0 != .custom }.sorted { $0.title < $1.title }
     }
     var id: String { rawValue }
     var title: String {
@@ -42,6 +46,7 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
         case .tsukumo: return "Tsukumo"
         case .tokyoNight: return "Tokyo Night"
         case .oneDark: return "One Dark"
+        case .rosePine: return "Rosé Pine"
         default: return rawValue.capitalized
         }
     }
@@ -105,6 +110,74 @@ enum ThemeFamily: String, CaseIterable, Identifiable {
         case (.oneDark, true): return .init("282C34", "333842", "D7DAE0", "61AFEF")
         case (.monokai, false): return .init("F5F5EC", "FFFFF7", "373A2C", "5B7516")
         case (.monokai, true): return .init("272822", "36372F", "F8F8F2", "A6E22E")
+        case (.noir, false): return .init("F4F4F2", "FFFFFF", "111111", "6E6E6E")
+        case (.noir, true): return .init("0B0B0C", "18181A", "F2F2F2", "E8E8E8")
+        case (.rosePine, false): return .init("FAF4ED", "FFFAF3", "575279", "B4637A")
+        case (.rosePine, true): return .init("191724", "1F1D2E", "E0DEF4", "EBBCBA")
+        case (.kanagawa, false): return .init("F2ECBC", "E7DBA0", "545464", "4D699B")
+        case (.kanagawa, true): return .init("1F1F28", "2A2A37", "DCD7BA", "7E9CD8")
+        case (.ayu, false): return .init("FCFCFC", "F3F4F5", "5C6166", "F2A300")
+        case (.ayu, true): return .init("0B0E14", "131721", "BFBDB6", "E6B450")
+        case (.custom, _): return CustomThemeColors.palette()
         }
+    }
+
+    /// Custom follows its own background rather than System/Light/Dark.
+    var fixedScheme: ColorScheme? {
+        guard self == .custom else { return nil }
+        return CustomThemeColors.isDark(CustomThemeColors.background) ? .dark : .light
+    }
+}
+
+/// The Custom theme: a chosen background and accent. The tile colour and a
+/// readable text colour are derived, so any choice keeps text at 4.5:1 or better.
+enum CustomThemeColors {
+    static let backgroundKey = "theme.custom.background"
+    static let accentKey = "theme.custom.accent"
+    static let defaultBackground = "1B2230"
+    static let defaultAccent = "7C9CFF"
+
+    static var background: String { clean(UserDefaults.standard.string(forKey: backgroundKey)) ?? defaultBackground }
+    static var accent: String { clean(UserDefaults.standard.string(forKey: accentKey)) ?? defaultAccent }
+
+    static func palette() -> FamilyPalette {
+        let bg = background
+        // Pure white or black: whichever reads better. One of them always
+        // reaches 4.5:1 against any background.
+        let foreground = contrast(bg, "FFFFFF") >= contrast(bg, "000000") ? "FFFFFF" : "000000"
+        // Tiles move a little toward the text colour, unless that would cost legibility.
+        var surface = mix(bg, foreground, 0.07)
+        if contrast(surface, foreground) < 4.5 { surface = mix(bg, foreground == "000000" ? "FFFFFF" : "000000", 0.07) }
+        return .init(bg, surface, foreground, accent)
+    }
+
+    static func isDark(_ hex: String) -> Bool { luminance(hex) < 0.25 }
+
+    static func clean(_ hex: String?) -> String? {
+        guard let hex else { return nil }
+        let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).uppercased()
+        return value.count == 6 && UInt32(value, radix: 16) != nil ? value : nil
+    }
+
+    static func contrast(_ a: String, _ b: String) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    static func luminance(_ hex: String) -> Double {
+        let (r, g, b) = components(hex)
+        func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    }
+
+    private static func components(_ hex: String) -> (Double, Double, Double) {
+        let v = UInt32(hex, radix: 16) ?? 0
+        return (Double((v >> 16) & 255) / 255, Double((v >> 8) & 255) / 255, Double(v & 255) / 255)
+    }
+
+    private static func mix(_ a: String, _ b: String, _ t: Double) -> String {
+        let (ar, ag, ab) = components(a), (br, bg, bb) = components(b)
+        func channel(_ x: Double, _ y: Double) -> Int { Int(((x + (y - x) * t) * 255).rounded()) }
+        return String(format: "%02X%02X%02X", channel(ar, br), channel(ag, bg), channel(ab, bb))
     }
 }

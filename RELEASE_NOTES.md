@@ -1,13 +1,14 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.36 (pre-release)
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.36** is a development build for macOS 26 and Apple Silicon. The stable
+release is 1.14; 2.36 does not replace it and installed 1.x copies are not
+offered it as an update.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+New since 2.35:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **Automatic updates for 2.x:** MacSpaces now checks GitHub for new 2.x pre-releases while it runs, downloads them, verifies the signature and asks before restarting to install. Settings → General → Updates has Check Now and the download switch. Earlier 2.x builds can't update themselves, so install 2.36 once by hand; later versions arrive on their own.
+- **Rounded app logo** in Settings.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in recent 2.x releases: Noir, Rosé Pine, Kanagawa, Ayu and Custom themes; a low-battery warning for Claude Code and Codex; battery health, cycles and charger details; moving sound bars in the notch; a Settings window that fits any size; a dock of pages (Music, Calendar with year progress, Weather, Reminders, Notes, Timers, Clipboard, System, Coding and Tray); and Small/Medium/Large widgets.
+
+Installed with Homebrew? The app updates itself, and `brew upgrade --cask zlichtman/tap/macspaces@beta` still works.
