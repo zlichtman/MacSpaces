@@ -78,14 +78,22 @@ final class UpdateService: ObservableObject {
     private static let automaticKey = "updates.automaticallyInstall"
     private static let automaticCheckKey = "updates.automaticallyCheck"
     private static let lastCheckKey = "updates.lastCheck"
+    /// A build this Mac can't run (too-new macOS or missing architecture), so
+    /// it isn't downloaded again on every check.
+    private static let incompatibleBuildKey = "updates.incompatibleBuild"
     private static let allowedDownloadHosts: Set<String> = [
         "github.com",
         "objects.githubusercontent.com",
         "release-assets.githubusercontent.com",
     ]
-    private let endpoint = URL(
-        string: "https://api.github.com/repos/zlichtman/MacSpaces/releases/latest"
-    )!
+    /// Stable (1.x) installs read releases/latest, which never returns a
+    /// pre-release. Pre-release (2.x) installs read the release list and take
+    /// the newest build with their own major version.
+    private var endpoint: URL {
+        URL(string: followsPrereleases
+            ? "https://api.github.com/repos/zlichtman/MacSpaces/releases?per_page=30"
+            : "https://api.github.com/repos/zlichtman/MacSpaces/releases/latest")!
+    }
 
     /// Bounded so a stalled connection cannot leave the UI stuck on
     /// "Checking…" or "Downloading…" forever.
@@ -100,28 +108,48 @@ final class UpdateService: ObservableObject {
     private var availableDownloadURL: URL?
     private var availableVersion: String?
     private var availableBuild: Int?
+    private var periodicCheck: Timer?
 
     private init() {
-        // Installing defaults off: it terminates and relaunches the app, which
-        // is not something to do to someone mid-task without asking.
+        // Stable installs don't download on their own by default. Pre-release
+        // installs do, so testers stay on the newest build. Either way the
+        // app asks before it quits and relaunches to install.
+        let prerelease = Bundle.main.object(forInfoDictionaryKey: "MacSpacesDevelopmentBuild") as? Bool == true
         UserDefaults.standard.register(defaults: [
-            Self.automaticKey: false,
+            Self.automaticKey: prerelease,
             Self.automaticCheckKey: true,
         ])
         automaticallyInstallUpdates = UserDefaults.standard.bool(forKey: Self.automaticKey)
         automaticallyCheckForUpdates = UserDefaults.standard.bool(forKey: Self.automaticCheckKey)
     }
 
+    /// Pre-release (2.x) builds carry MacSpacesDevelopmentBuild and update
+    /// from GitHub pre-releases instead of the stable feed.
+    var followsPrereleases: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MacSpacesDevelopmentBuild") as? Bool == true
+    }
+
     func start() {
-        guard automaticallyCheckForUpdates else { return }
-        let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
-        guard last == nil || Date().timeIntervalSince(last!) > 6 * 60 * 60 else {
-            return
-        }
+        // Isolated QA and demo builds never update themselves.
+        guard Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces" else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(8))
-            check(manual: false)
+            checkIfDue()
         }
+        // A menu-bar app runs for days, so checking only at launch would miss
+        // releases published while it's open.
+        periodicCheck?.invalidate()
+        periodicCheck = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { _ in
+            Task { @MainActor in UpdateService.shared.checkIfDue() }
+        }
+    }
+
+    private func checkIfDue() {
+        guard automaticallyCheckForUpdates else { return }
+        if case .available = status { return }
+        let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
+        guard last == nil || Date().timeIntervalSince(last!) > 6 * 60 * 60 else { return }
+        check(manual: false)
     }
 
     func check(manual: Bool = true) {
@@ -141,25 +169,16 @@ final class UpdateService: ObservableObject {
                 guard let self else { return }
                 self.task = nil
                 UserDefaults.standard.set(Date(), forKey: Self.lastCheckKey)
-                guard error == nil,
-                      let data,
-                      let release = try? JSONDecoder().decode(Release.self, from: data),
-                      !release.draft,
-                      !release.prerelease else {
+                guard error == nil, let data,
+                      let selected = self.selectRelease(from: data) else {
                     self.status = manual
                         ? .failed("Couldn’t check for updates")
                         : .idle
                     return
                 }
-
-                // The public version comes from the tag; the downloaded app
-                // must match it and the build marker before it can install.
-                guard let version = ReleaseRevision.version(fromTag: release.tagName),
-                      let build = ReleaseRevision.build(in: release.body) else {
-                    self.status = .failed("Update information is incomplete")
-                    return
-                }
-                guard ReleaseRevision.isNewer(build, than: self.currentBuild) else {
+                let (release, version, build) = selected
+                let skipped = UserDefaults.standard.integer(forKey: Self.incompatibleBuildKey)
+                guard ReleaseRevision.isNewer(build, than: max(self.currentBuild, skipped)) else {
                     self.availableDownloadURL = nil
                     self.availableVersion = nil
                     self.availableBuild = nil
@@ -191,6 +210,27 @@ final class UpdateService: ObservableObject {
             }
         }
         task?.resume()
+    }
+
+    /// The release to offer and its public version and build. The public
+    /// version comes from the tag; the downloaded app must match it and the
+    /// build marker before it can install.
+    private func selectRelease(from data: Data) -> (Release, String, Int)? {
+        let decoder = JSONDecoder()
+        if followsPrereleases {
+            guard let releases = try? decoder.decode([Release].self, from: data),
+                  let major = ReleaseRevision.major(of: currentVersion) else { return nil }
+            let candidates = releases.map {
+                ReleaseRevision.Candidate(tag: $0.tagName, body: $0.body, draft: $0.draft, prerelease: $0.prerelease)
+            }
+            guard let choice = ReleaseRevision.newest(in: candidates, major: major) else { return nil }
+            return (releases[choice.index], choice.version, choice.build)
+        }
+        guard let release = try? decoder.decode(Release.self, from: data),
+              !release.draft, !release.prerelease,
+              let version = ReleaseRevision.version(fromTag: release.tagName),
+              let build = ReleaseRevision.build(in: release.body) else { return nil }
+        return (release, version, build)
     }
 
     var actionLabel: String {
@@ -261,18 +301,25 @@ final class UpdateService: ObservableObject {
         Task {
             // Mounting, verifying and copying a few hundred megabytes takes
             // seconds. Run it off the main actor so the UI stays responsive.
-            let staged = await Task.detached(priority: .userInitiated) {
-                try? Self.stageVerifiedApp(
-                    from: diskImage,
-                    expectedBundleIdentifier: bundleIdentifier,
-                    expectedVersion: version,
-                    expectedBuild: build,
-                    matching: installedApp
-                )
+            let result = await Task.detached(priority: .userInitiated) {
+                Result {
+                    try Self.stageVerifiedApp(
+                        from: diskImage,
+                        expectedBundleIdentifier: bundleIdentifier,
+                        expectedVersion: version,
+                        expectedBuild: build,
+                        matching: installedApp
+                    )
+                }
             }.value
 
-            guard let staged else {
-                status = .failed("Update verification failed")
+            guard case let .success(staged) = result else {
+                if case let .failure(error) = result, case UpdateError.incompatible? = error as? UpdateError {
+                    UserDefaults.standard.set(build, forKey: Self.incompatibleBuildKey)
+                    status = .failed("MacSpaces \(version) doesn’t support this Mac")
+                } else {
+                    status = .failed("Update verification failed")
+                }
                 try? FileManager.default.removeItem(at: diskImage)
                 return
             }
@@ -309,7 +356,7 @@ final class UpdateService: ObservableObject {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    private struct StagedUpdate {
+    private struct StagedUpdate: Sendable {
         let root: URL
         let app: URL
     }
@@ -351,6 +398,7 @@ final class UpdateService: ObservableObject {
                   Int(buildString) == expectedBuild else {
                 throw UpdateError.invalidBundle
             }
+            guard let info, canRun(info) else { throw UpdateError.incompatible }
             try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", mountedApp.path])
             let incomingTeam = signingTeam(at: mountedApp)
             guard let incomingTeam,
@@ -389,6 +437,26 @@ final class UpdateService: ObservableObject {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", script]
         try process.run()
+    }
+
+    /// Whether this Mac can run the downloaded app: its minimum macOS and an
+    /// executable slice for this process's architecture.
+    nonisolated private static func canRun(_ app: Bundle) -> Bool {
+        if let minimum = app.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String {
+            let parts = minimum.split(separator: ".").map { Int($0) ?? 0 }
+            let required = OperatingSystemVersion(
+                majorVersion: parts.first ?? 0,
+                minorVersion: parts.count > 1 ? parts[1] : 0,
+                patchVersion: parts.count > 2 ? parts[2] : 0
+            )
+            guard ProcessInfo.processInfo.isOperatingSystemAtLeast(required) else { return false }
+        }
+        #if arch(x86_64)
+        let architecture = NSBundleExecutableArchitectureX86_64
+        #else
+        let architecture = NSBundleExecutableArchitectureARM64
+        #endif
+        return app.executableArchitectures?.contains(NSNumber(value: architecture)) == true
     }
 
     /// Returns nil for unsigned and ad-hoc signed bundles. `codesign` reports
@@ -463,7 +531,7 @@ final class UpdateService: ObservableObject {
         content.title = "MacSpaces \(version)"
         content.body = automaticallyInstallUpdates
             ? "Downloading the update. You'll be asked before it installs."
-            : "Open About to install the update."
+            : "Open Settings → General to install the update."
         let request = UNNotificationRequest(
             identifier: "macspaces-update-\(version)",
             content: content,
@@ -491,6 +559,7 @@ final class UpdateService: ObservableObject {
     private enum UpdateError: Error {
         case invalidBundle
         case invalidSignature
+        case incompatible
         case notInstalled
         case commandFailed
     }
