@@ -1,13 +1,14 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.38
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.38** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel. On macOS 13 or 14, keep using 1.14.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+New in 2.38:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **Theme drawers:** over forty themes in Core, Terminal, Nature, Sweets and Studio. Nature brings Blossom, Lavender, Aurora, Alpine, Moss, Sunflower, Coral and Dune; Sweets brings Bubblegum, Matcha, Strawberry Milk, Lemon Drop and Cotton Candy; Studio adds Encore, Matinee, Barista, Arcade, Parcel and Newsprint.
+- **Theme patterns:** flowers, ridges, waves, stars and more drawn softly behind the Nook. Turn off **Theme patterns** in Appearance for plain colours.
+- **Karma:** a plum and orchid theme in place of One Dark. If you used One Dark, you're now on Karma.
+- **Updates:** 2.38 follows official releases, downloads them automatically, and asks before restarting. If MacSpaces isn't in Applications, it tells you to move it there.
+- The Tsukumo quick bar is gone; Tsukumo will get a full page in the notch.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in 2.x: a dock of pages, widgets in three sizes, a low-battery warning for Claude Code and Codex, battery details, moving sound bars in the notch, and a Settings window that fits any size.

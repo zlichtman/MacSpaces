@@ -19,6 +19,8 @@ final class MediaRemoteProvider: NowPlayingProvider {
     private let sendCommand: SendCommandFn?
     private let getIsPlaying: GetIsPlayingFn?
     private let setElapsedTime: SetElapsedTimeFn?
+    private var registerNotifications: RegisterNotificationsFn?
+    private var unregisterNotifications: (() -> Void)?
     private var observers: [NSObjectProtocol] = []
     var onChange: (() -> Void)?
 
@@ -50,10 +52,18 @@ final class MediaRemoteProvider: NowPlayingProvider {
         sendCommand = symbol("MRMediaRemoteSendCommand", as: SendCommandFn.self)
         getIsPlaying = symbol("MRMediaRemoteGetNowPlayingApplicationIsPlaying", as: GetIsPlayingFn.self)
         setElapsedTime = symbol("MRMediaRemoteSetElapsedTime", as: SetElapsedTimeFn.self)
-        let registerNotifications = symbol(
+        registerNotifications = symbol(
             "MRMediaRemoteRegisterForNowPlayingNotifications",
             as: RegisterNotificationsFn.self
         )
+        typealias UnregisterFn = @convention(c) () -> Void
+        if let unregister = symbol("MRMediaRemoteUnregisterForNowPlayingNotifications", as: UnregisterFn.self) {
+            unregisterNotifications = { unregister() }
+        }
+    }
+
+    func startObserving() {
+        guard observers.isEmpty else { return }
         registerNotifications?(DispatchQueue.main)
 
         let notificationNames = [
@@ -71,6 +81,13 @@ final class MediaRemoteProvider: NowPlayingProvider {
                 self?.onChange?()
             }
         }
+    }
+
+    func stopObserving() {
+        guard !observers.isEmpty else { return }
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        unregisterNotifications?()
     }
 
     var isAvailable: Bool {
@@ -91,6 +108,8 @@ final class MediaRemoteProvider: NowPlayingProvider {
             }
 
             var info = NowPlayingInfo()
+            info.sourceName = "System player"
+            if self?.sendCommand != nil { info.capabilities = [.playPause, .previous, .next] }
             info.title = title
             info.artist = dict["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? ""
             info.album = dict["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
@@ -99,6 +118,7 @@ final class MediaRemoteProvider: NowPlayingProvider {
                 info.isPlaying = rate > 0
             }
             info.duration = (dict["kMRMediaRemoteNowPlayingInfoDuration"] as? NSNumber)?.doubleValue ?? 0
+            if self?.setElapsedTime != nil, info.duration.isFinite, info.duration > 0 { info.capabilities.insert(.seek) }
             info.elapsed = (dict["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? NSNumber)?.doubleValue ?? 0
 
             // Playback rate is not always populated; double-check with the
@@ -172,20 +192,22 @@ final class MediaRemoteProvider: NowPlayingProvider {
         return nil
     }
 
-    func send(_ command: NowPlayingCommand) {
+    func send(_ command: NowPlayingCommand, completion: @escaping (Result<Void, PlaybackCommandError>) -> Void) {
         if case .seek(let elapsed) = command {
-            setElapsedTime?(elapsed)
+            guard let setElapsedTime, elapsed.isFinite else { completion(.failure(.unavailable)); return }
+            setElapsedTime(elapsed)
+            completion(.success(()))
             return
         }
-        guard let sendCommand else { return }
+        guard let sendCommand else { completion(.failure(.unavailable)); return }
         let mrCommand: Command
         switch command {
         case .togglePlayPause: mrCommand = .togglePlayPause
         case .nextTrack: mrCommand = .nextTrack
         case .previousTrack: mrCommand = .previousTrack
-        case .seek: return
+        case .seek: completion(.failure(.unavailable)); return
         }
-        _ = sendCommand(mrCommand.rawValue, nil)
+        completion(sendCommand(mrCommand.rawValue, nil) ? .success(()) : .failure(.rejected))
     }
 
     deinit {

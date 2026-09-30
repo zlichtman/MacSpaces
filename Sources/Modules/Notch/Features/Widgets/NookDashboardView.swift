@@ -13,7 +13,7 @@ struct NookDashboardView: View {
     init(viewModel: NotchViewModel) {
         self.viewModel = viewModel
         self.settings = viewModel.settings
-        _visualOrder = State(initialValue: viewModel.settings.widgets)
+        _visualOrder = State(initialValue: viewModel.settings.widgets.filter { !$0.isQuickBar })
     }
 
     var body: some View {
@@ -31,16 +31,18 @@ struct NookDashboardView: View {
             } else {
                 compatibleWidgetScroll {
                     let fullHeight = max(138, proxy.size.height)
-                    let widths = visualOrder.fittedNookWidths(availableWidth: proxy.size.width)
-                    let compactKinds = compactWidgetKinds
+                    let sizes = settings.widgetSizes
+                    let widths = visualOrder.fittedNookWidths(availableWidth: proxy.size.width, sizes: sizes)
+                    let compactKinds = compactWidgetKinds(sizes)
                     NookTilesLayout(spacing: 10) {
-                        ForEach(visualOrder) { kind in
+                        ForEach(Array(visualOrder.enumerated()), id: \.element) { index, kind in
                             let compact = compactKinds.contains(kind)
                             dashboardTile(
                                 kind: kind,
-                                width: widths[kind] ?? kind.preferredWidth,
+                                width: widths[kind] ?? kind.width(for: settings.size(for: kind)),
                                 height: compact ? (fullHeight - 10) / 2 : fullHeight,
-                                compact: compact
+                                compact: compact,
+                                entranceIndex: index
                             )
                             .layoutValue(
                                 key: NookCompactRowLayoutValueKey.self,
@@ -57,8 +59,9 @@ struct NookDashboardView: View {
             }
         }
         .onChange(of: settings.widgets) { widgets in
-            guard draggedKind == nil, visualOrder != widgets else { return }
-            visualOrder = widgets
+            let tiles = widgets.filter { !$0.isQuickBar }
+            guard draggedKind == nil, visualOrder != tiles else { return }
+            visualOrder = tiles
         }
         .onDisappear {
             if draggedKind != nil {
@@ -79,10 +82,10 @@ struct NookDashboardView: View {
         }
     }
 
-    private var compactWidgetKinds: Set<NookWidgetKind> {
+    private func compactWidgetKinds(_ sizes: [NookWidgetKind: NookWidgetSize]) -> Set<NookWidgetKind> {
         Set(
             visualOrder
-                .nookLayoutItems()
+                .nookLayoutItems(sizes: sizes)
                 .filter(\.isStack)
                 .flatMap(\.kinds)
         )
@@ -92,7 +95,8 @@ struct NookDashboardView: View {
         kind: NookWidgetKind,
         width: CGFloat,
         height: CGFloat,
-        compact: Bool
+        compact: Bool,
+        entranceIndex: Int
     ) -> some View {
         NookDashboardTile(
             kind: kind,
@@ -102,6 +106,7 @@ struct NookDashboardView: View {
             viewModel: viewModel,
             isReordering: draggedKind == kind
         )
+        .modifier(NookTileEntrance(index: entranceIndex))
         .onDrag {
             draggedKind = kind
             settings.beginInteractiveReorder()
@@ -121,7 +126,7 @@ struct NookDashboardView: View {
                 target: kind,
                 order: $visualOrder,
                 draggedKind: $draggedKind,
-                onOrderChanged: settings.setWidgetOrder,
+                onOrderChanged: { settings.setWidgetOrder($0 + settings.widgets.filter(\.isQuickBar)) },
                 onFinish: WidgetDragSession.shared.finish
             )
         )
@@ -245,20 +250,21 @@ private struct NookDashboardTile: View {
     let isReordering: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: compact ? 2 : 5) {
             HStack(spacing: 5) {
                 Image(systemName: kind.systemImage)
                     .foregroundStyle(theme.notch.accent)
-                if width >= 150 {
+                if width >= 104 {
                     Text(kind.title.uppercased())
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
-            .font(.system(size: 8, weight: .bold))
+            .font(.system(size: 9, weight: .bold))
+            .tracking(0.3)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
+            .padding(.horizontal, 11)
+            .padding(.top, compact ? 7 : 9)
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -297,6 +303,17 @@ private struct NookDashboardTile: View {
                         action: {
                             viewModel.settings.setEnabled(true, for: candidate)
                         }
+                    )
+                }
+            ),
+            WidgetContextMenuItem(
+                title: "Size",
+                systemImage: "square.resize",
+                children: kind.supportedSizes.map { size in
+                    WidgetContextMenuItem(
+                        title: size.title + (viewModel.settings.size(for: kind) == size ? " ✓" : ""),
+                        systemImage: size.symbol,
+                        action: { withAnimation(Design.spring()) { viewModel.settings.setSize(size, for: kind) } }
                     )
                 }
             ),
@@ -363,22 +380,23 @@ private struct NookDashboardTile: View {
     private var content: some View {
         switch kind {
         case .media:
-            MediaPlayerView(nowPlaying: viewModel.nowPlaying, style: visualStyle)
-                .padding(.horizontal, 5)
+            if compact {
+                CompactMediaView(nowPlaying: viewModel.nowPlaying)
+            } else {
+                MediaPlayerView(nowPlaying: viewModel.nowPlaying, style: visualStyle)
+                    .padding(.horizontal, 5)
+            }
         case .shortcuts:
             ShortcutsWidget(service: AppServices.shared.shortcuts, compact: true)
         case .calendar:
-            CalendarWidget(service: AppServices.shared.calendar)
+            CalendarWidget(service: AppServices.shared.calendar, compact: compact,
+                           large: viewModel.settings.size(for: .calendar) == .large)
         case .todos:
-            RemindersWidget(service: AppServices.shared.calendar)
+            RemindersWidget(service: AppServices.shared.calendar, compact: compact)
         case .timer:
-            NookTimerWidget(
-                service: viewModel.timerService,
-                style: visualStyle,
-                compact: compact
-            )
+            NookTimerWidget(service: viewModel.timerService, compact: compact)
         case .notes:
-            NotesWidget()
+            NotesWidget(compact: compact)
         case .mirror:
             MirrorView()
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -387,22 +405,25 @@ private struct NookDashboardTile: View {
             NookBatteryWidget(monitor: viewModel.powerMonitor, bluetooth: viewModel.bluetoothMonitor, compact: compact,
                               onDetailsChanged: { viewModel.isDeviceDetailsPresented = $0 })
         case .clock:
-            NookClockWidget(style: visualStyle, compact: compact)
+            NookClockWidget(compact: compact)
         case .weather:
-            WeatherWidget(service: AppServices.shared.weather, compact: compact, surface: .notch,
+            WeatherWidget(service: AppServices.shared.weather, compact: compact,
+                          showsForecast: width >= 260, surface: .notch,
                           onDetailsChanged: { viewModel.isWeatherDetailsPresented = $0 })
         case .clipboard:
-            ClipboardWidget(monitor: AppServices.shared.clipboard)
+            ClipboardWidget(monitor: AppServices.shared.clipboard, compact: compact)
         case .pomodoro:
             PomodoroWidget(compact: compact)
         case .quickActions:
-            QuickActionsWidget()
+            QuickActionsWidget(columns: width >= 220 ? 3 : 2)
         case .audioControls:
-            AudioControlsWidget(service: AppServices.shared.audioMixer)
+            AudioControlsWidget(service: AppServices.shared.audioMixer, compact: compact)
         case .systemStats:
-            SystemStatsWidget(service: AppServices.shared.systemStats)
+            SystemStatsWidget(service: AppServices.shared.systemStats, compact: compact)
+        case .notifications:
+            MessagesWidget()
         case .keepAwake:
-            KeepAwakeWidget(service: AppServices.shared.keepAwake)
+            KeepAwakeWidget(service: AppServices.shared.keepAwake, compact: compact)
 
         }
     }
@@ -436,191 +457,33 @@ struct AddNookWidgetMenu: View {
     }
 }
 
-private struct NookTimerWidget: View {
-    @ObservedObject var service: TimerService
-    let style: WidgetVisualStyle
-    let compact: Bool
-
-    var body: some View {
-        Group {
-            if compact {
-                HStack(spacing: 6) {
-                    if service.isRunning {
-                        Text(service.remainingText)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .layoutPriority(1)
-                        ProgressView(value: service.progress)
-                            .tint(
-                                style == .terminal
-                                    ? ThemeStore.shared.notch.accent
-                                    : .orange
-                            )
-                        Button {
-                            service.cancel()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    } else {
-                        ForEach([5, 15, 25], id: \.self) { minutes in
-                            Button("\(minutes)") { service.start(minutes: minutes) }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 9, weight: .bold))
-                                .frame(maxWidth: .infinity, minHeight: 20)
-                                .background(
-                                    .primary.opacity(0.08),
-                                    in: RoundedRectangle(cornerRadius: 6)
-                                )
-                        }
-                    }
-                }
-                .padding(.horizontal, 9)
-            } else if service.isRunning, style == .orbit {
-                ZStack {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.10), lineWidth: 7)
-                    Circle()
-                        .trim(from: 0, to: service.progress)
-                        .stroke(
-                            ThemeStore.shared.notch.accent,
-                            style: StrokeStyle(lineWidth: 7, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                    VStack(spacing: 2) {
-                        Text(service.remainingText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                        Button("Cancel") { service.cancel() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-            } else {
-                VStack(spacing: 8) {
-                    if service.isRunning {
-                        Text(service.remainingText)
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        ProgressView(value: service.progress)
-                            .tint(style == .terminal ? ThemeStore.shared.notch.accent : .orange)
-                            .padding(.horizontal, 14)
-                        Button("Cancel") { service.cancel() }
-                            .buttonStyle(.plain)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "timer")
-                            .font(.system(size: 21, weight: .medium))
-                            .foregroundStyle(.orange)
-                        HStack(spacing: 5) {
-                            ForEach([5, 15, 25], id: \.self) { minutes in
-                                Button("\(minutes)") { service.start(minutes: minutes) }
-                                    .buttonStyle(.plain)
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .frame(width: 25, height: 22)
-                                    .background(
-                                        .primary.opacity(0.08),
-                                        in: RoundedRectangle(cornerRadius: 7)
-                                    )
-                                    .help("Start \(minutes)-minute timer")
-                            }
-                        }
-                    }
-                }
-            }
+extension NookWidgetSize {
+    var symbol: String {
+        switch self {
+        case .small: return "square.split.1x2"
+        case .medium: return "rectangle.portrait"
+        case .large: return "rectangle"
         }
     }
 }
 
-private struct NookClockWidget: View {
-    let style: WidgetVisualStyle
-    let compact: Bool
+/// Tiles fall out of the notch one after another as the Nook opens, so the
+/// panel reads as a drop rather than a window appearing.
+private struct NookTileEntrance: ViewModifier {
+    let index: Int
+    @State private var settled = false
+    @ObservedObject private var theme = ThemeStore.shared
 
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            if compact {
-                HStack(spacing: 5) {
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(
-                            .system(
-                                size: 14,
-                                weight: .bold,
-                                design: style == .terminal ? .monospaced : .rounded
-                            )
-                        )
-                        .monospacedDigit()
-                        .lineLimit(1)
-                    Spacer(minLength: 2)
-                    Text(context.date, format: .dateTime.weekday(.abbreviated))
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 9)
-            } else if style == .terminal {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("LOCAL_TIME")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ThemeStore.shared.notch.accent)
-                    Text(context.date, format: .dateTime.hour().minute().second())
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                }
-            } else if style == .orbit {
-                ZStack {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.10), lineWidth: 5)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(Calendar.current.component(.second, from: context.date)) / 60)
-                        .stroke(
-                            ThemeStore.shared.notch.accent,
-                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                }
-                .padding(12)
-            } else if style == .mono {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("LOCAL / \(context.date.formatted(.dateTime.weekday(.abbreviated)))")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ThemeStore.shared.notch.accent)
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .monospacedDigit()
-                }
-            } else if style == .frame {
-                HStack(spacing: 9) {
-                    Rectangle()
-                        .fill(ThemeStore.shared.notch.accent)
-                        .frame(width: 2, height: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(context.date, format: .dateTime.hour().minute())
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        Text(context.date, format: .dateTime.weekday(.wide))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                VStack(spacing: 5) {
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                    Text(context.date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+    func body(content: Content) -> some View {
+        content
+            .opacity(settled ? 1 : 0)
+            .offset(y: settled || theme.reduceMotion ? 0 : -18)
+            .scaleEffect(settled || theme.reduceMotion ? 1 : 0.94, anchor: .top)
+            .blur(radius: settled || theme.reduceMotion ? 0 : 5)
+            .onAppear {
+                guard !settled else { return }
+                let delay = theme.reduceMotion ? 0 : 0.05 + Double(min(index, 8)) * 0.035
+                withAnimation(Design.dropAnimation.delay(delay * Design.demoTimeScale)) { settled = true }
             }
-        }
     }
 }

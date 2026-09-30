@@ -16,34 +16,53 @@ enum Design {
     static let hairline = Color.white.opacity(0.12)
     static let subtleShadow = Color.black.opacity(0.24)
 
+    /// Slows every motion token for frame-by-frame demo capture. Always 1 in
+    /// the app; the website demo helper raises it so each 60 fps frame can
+    /// be rendered before the animation moves on.
+    @MainActor static var demoTimeScale: Double = 1
+
+    @MainActor
+    private static func timed(_ animation: Animation) -> Animation {
+        demoTimeScale == 1 ? animation : animation.speed(1 / demoTimeScale)
+    }
+
     @MainActor
     static func spring() -> Animation {
-        ThemeStore.shared.reduceMotion
+        timed(ThemeStore.shared.reduceMotion
             ? .easeOut(duration: 0.16)
-            : .spring(response: 0.30, dampingFraction: 0.88)
+            : .spring(response: 0.30, dampingFraction: 0.88))
     }
 
     @MainActor
     static var hoverAnimation: Animation {
-        ThemeStore.shared.reduceMotion ? .linear(duration: 0.01) : .spring(response: 0.24, dampingFraction: 0.8)
+        timed(ThemeStore.shared.reduceMotion ? .linear(duration: 0.01) : .spring(response: 0.24, dampingFraction: 0.8))
     }
 
     /// Opening settles without overshoot so the large surface never appears
     /// to keep rolling once its content is interactive.
     @MainActor
     static var openAnimation: Animation {
-        ThemeStore.shared.reduceMotion
+        timed(ThemeStore.shared.reduceMotion
             ? .easeOut(duration: 0.16)
-            : .spring(response: 0.34, dampingFraction: 0.9)
+            : .spring(response: 0.34, dampingFraction: 0.9))
+    }
+
+    /// Tiles and the dock settle with a little give as they fall out of the
+    /// notch, which is what makes the open read as a drop.
+    @MainActor
+    static var dropAnimation: Animation {
+        timed(ThemeStore.shared.reduceMotion
+            ? .easeOut(duration: 0.16)
+            : .spring(response: 0.42, dampingFraction: 0.72))
     }
 
     /// Closing is quicker and critically damped: the surface tucks back into
     /// the camera housing without bouncing past it.
     @MainActor
     static var closeAnimation: Animation {
-        ThemeStore.shared.reduceMotion
+        timed(ThemeStore.shared.reduceMotion
             ? .easeOut(duration: 0.14)
-            : .spring(response: 0.28, dampingFraction: 0.97)
+            : .spring(response: 0.28, dampingFraction: 0.97))
     }
 }
 

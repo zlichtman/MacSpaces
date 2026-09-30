@@ -9,7 +9,6 @@ DERIVED_DATA="$STAGING_ROOT/DerivedData"
 PROJECT_BUILD_ROOT="$STAGING_ROOT/Project"
 APP_SOURCE="$DERIVED_DATA/Build/Products/Release/MacSpaces.app"
 APP_STAGED="$STAGING_ROOT/MacSpaces.app"
-DMG_ROOT="$STAGING_ROOT/dmg"
 DMG_STAGED="$STAGING_ROOT/MacSpaces.dmg"
 DMG_PATH="$RELEASES_DIR/MacSpaces.dmg"
 VERIFY_MOUNT="$STAGING_ROOT/verify-mount"
@@ -99,18 +98,8 @@ fi
 codesign --verify --deep --strict --verbose=2 "$APP_STAGED"
 
 package_dmg() {
-  rm -rf "$DMG_ROOT"
-  mkdir -p "$DMG_ROOT"
-  ditto "$APP_STAGED" "$DMG_ROOT/MacSpaces.app"
-  codesign --verify --deep --strict --verbose=2 "$DMG_ROOT/MacSpaces.app"
-  ln -s /Applications "$DMG_ROOT/Applications"
   rm -f "$DMG_STAGED"
-  hdiutil create \
-    -volname "MacSpaces $VERSION" \
-    -srcfolder "$DMG_ROOT" \
-    -ov \
-    -format UDZO \
-    "$DMG_STAGED"
+  "$PROJECT_ROOT/Scripts/build-installer.sh" "$APP_STAGED" "$DMG_STAGED" "MacSpaces $VERSION"
 }
 
 NOTARIZATION_STATUS="Not submitted"
@@ -165,7 +154,7 @@ if [[ "$NOTARIZE" == "1" ]]; then
 fi
 
 # A release is publishable only when the app survives an actual image
-# round-trip with its bundle signature and both architectures intact.
+# round-trip with its bundle signature and Apple Silicon architecture intact.
 mkdir -p "$VERIFY_MOUNT"
 hdiutil attach \
   -nobrowse \
