@@ -569,7 +569,16 @@ final class ThemeStore: ObservableObject {
         family = selection
     }
 
+    /// Custom theme colours, stored as hex. Changing either refreshes the Nook.
+    @Published var customThemeBackground: String = CustomThemeColors.background {
+        didSet { defaults.set(customThemeBackground, forKey: CustomThemeColors.backgroundKey) }
+    }
+    @Published var customThemeAccent: String = CustomThemeColors.accent {
+        didSet { defaults.set(customThemeAccent, forKey: CustomThemeColors.accentKey) }
+    }
+
     private func familyTokens(_ family: ThemeFamily) -> ThemeTokens {
+        let resolvedScheme = family.fixedScheme ?? self.resolvedScheme
         let colors = family.palette(resolvedScheme)
         let accent = colors.color(colors.accent)
         let foreground = colors.color(colors.foreground)
@@ -817,12 +826,14 @@ struct SurfacePaletteMenuContent: View {
         Picker("Appearance", selection: $theme.appearanceMode) {
             ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
-        .disabled(theme.family == nil)
+        .disabled(theme.family == nil || theme.family == .custom)
         Divider()
         ForEach(ThemeFamily.signature) { family in themeButton(family) }
         Divider()
         Menu("Palettes") {
             ForEach(ThemeFamily.palettes) { family in themeButton(family) }
+            Divider()
+            themeButton(.custom)
         }
         if theme.notchPreset == .custom {
             Button {

@@ -1,10 +1,15 @@
 import Foundation
 
-struct ClipboardEntry: Identifiable, Equatable {
+struct ClipboardEntry: Identifiable, Equatable, Codable {
     let id: UUID
     let text: String
     var date: Date
     var isFavorite: Bool
+    var representations: [[String: Data]] = []
+    var sourceName: String = ""
+    var sourceBundleID: String = ""
+    var tags: [String] = []
+    var byteCount: Int { text.utf8.count + representations.reduce(0) { $0 + $1.values.reduce(0) { $0 + $1.count } } }
 
     init(id: UUID = UUID(), text: String, date: Date = Date(), isFavorite: Bool = false) {
         self.id = id
@@ -19,8 +24,7 @@ struct ClipboardEntry: Identifiable, Equatable {
     }
 }
 
-/// Deliberately memory-only, including favorites. Limits bound both collection
-/// size and large copies; favorites survive normal history eviction, not quit.
+/// Bounded clipboard values. Disk persistence is an explicit choice owned by ClipboardMonitor.
 struct ClipboardHistory {
     private(set) var entries: [ClipboardEntry] = []
     let historyLimit: Int
@@ -33,16 +37,28 @@ struct ClipboardHistory {
     }
 
     mutating func record(_ text: String, at date: Date = Date()) {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              text.utf8.count <= maximumTextBytes else { return }
-        if let index = entries.firstIndex(where: { $0.text == text }) {
-            var entry = entries.remove(at: index)
-            entry.date = date
+        record(ClipboardEntry(text: text, date: date))
+    }
+
+    mutating func record(_ value: ClipboardEntry) {
+        guard value.byteCount <= 8 * 1024 * 1024,
+              value.text.utf8.count <= maximumTextBytes,
+              !value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !value.representations.isEmpty else { return }
+        if let index = entries.firstIndex(where: { $0.text == value.text && $0.representations == value.representations }) {
+            var entry = entries.remove(at: index); entry.date = value.date
             entries.insert(entry, at: 0)
         } else {
-            entries.insert(ClipboardEntry(text: text, date: date), at: 0)
+            guard !value.isFavorite || entries.filter(\.isFavorite).count < favoriteLimit else { return }
+            let favoriteBytes = entries.filter(\.isFavorite).reduce(0) { $0 + $1.byteCount }
+            guard favoriteBytes + value.byteCount <= 32 * 1024 * 1024 else { return }
+            entries.insert(value, at: 0)
         }
         trim()
+    }
+
+    mutating func restore(_ values: [ClipboardEntry]) {
+        entries = []
+        for value in values.reversed() { record(value) }
     }
 
     @discardableResult
@@ -63,16 +79,18 @@ struct ClipboardHistory {
     func matching(_ query: String, favoritesOnly: Bool = false) -> [ClipboardEntry] {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return entries.filter {
-            (!favoritesOnly || $0.isFavorite) && (search.isEmpty || $0.text.localizedStandardContains(search))
+            (!favoritesOnly || $0.isFavorite) && (search.isEmpty || ($0.text + " " + $0.sourceName + " " + $0.tags.joined(separator: " ")).localizedStandardContains(search))
         }
     }
 
     private mutating func trim() {
         var ordinary = 0
+        var bytes = entries.filter(\.isFavorite).reduce(0) { $0 + $1.byteCount }
         entries = entries.filter {
             if $0.isFavorite { return true }
             ordinary += 1
-            return ordinary <= historyLimit
+            bytes += $0.byteCount
+            return ordinary <= historyLimit && bytes <= 32 * 1024 * 1024
         }
     }
 }

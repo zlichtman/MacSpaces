@@ -35,7 +35,15 @@ enum NookWidgetKind { case placeholder }
         precondition(AppearanceMode.light.scheme(systemIsDark: true) == .light)
         precondition(AppearanceMode.dark.scheme(systemIsDark: false) == .dark)
         precondition(ThemeFamily.signature == [.macspaces, .powdermeet, .heartable, .kemosabe, .tsukumo])
-        let catalog = ThemeFamily.signature + ThemeFamily.palettes
+        let catalog = ThemeFamily.signature + ThemeFamily.palettes + [.custom]
+        precondition(ThemeFamily.palettes.count == 19 && !ThemeFamily.palettes.contains(.custom))
+        // Any custom background keeps readable text; the scheme follows it.
+        for bg in ["000000", "FFFFFF", "777777", "808080", "1B2230", "F2ECBC", "FF0000", "00FF00", "0000FF", "5A5A5A"] {
+            UserDefaults.standard.set(bg, forKey: CustomThemeColors.backgroundKey)
+            let p = ThemeFamily.custom.palette(.dark)
+            precondition(contrast(p.foreground, p.background) >= 4.5 && contrast(p.foreground, p.surface) >= 4.5, "custom \(bg)")
+        }
+        UserDefaults.standard.removeObject(forKey: CustomThemeColors.backgroundKey)
         precondition(Set(catalog).count == catalog.count && Set(catalog) == Set(ThemeFamily.allCases))
         precondition(ThemeFamily.palettes.contains(.catppuccin) && ThemeFamily.palettes.contains(.everforest))
         for preset in ThemePreset.allCases {

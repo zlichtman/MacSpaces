@@ -16,25 +16,21 @@ guard let context = NSGraphicsContext.current?.cgContext else {
 context.setAllowsAntialiasing(true)
 context.setShouldAntialias(true)
 
-// A flat, full-bleed black plate. The transparent outer margin keeps the icon
-// clean in Finder without the square image edge that the previous artwork had.
-let plate = NSBezierPath(
-    roundedRect: NSRect(x: 64, y: 64, width: 896, height: 896),
-    xRadius: 206,
-    yRadius: 206
-)
+// Full-bleed black art. macOS 26 applies its own continuous-corner mask to
+// icons that fill the canvas; art with its own rounded plate and a
+// transparent margin is treated as legacy and boxed inside a grey tile.
 NSColor.black.setFill()
-plate.fill()
+NSRect(origin: .zero, size: canvas).fill()
 
 // A direct monochrome "//" mark. There are no
 // gradients, shadows, highlights, or faux-device details.
 NSColor.white.setStroke()
-for centerX in [402.0, 622.0] {
+for centerX in [397.0, 627.0] {
     let slash = NSBezierPath()
-    slash.lineWidth = 96
+    slash.lineWidth = 100
     slash.lineCapStyle = .round
-    slash.move(to: NSPoint(x: centerX - 92, y: 292))
-    slash.line(to: NSPoint(x: centerX + 92, y: 732))
+    slash.move(to: NSPoint(x: centerX - 96, y: 290))
+    slash.line(to: NSPoint(x: centerX + 96, y: 734))
     slash.stroke()
 }
 

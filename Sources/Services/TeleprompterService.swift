@@ -82,6 +82,7 @@ final class TeleprompterService: ObservableObject {
     private let nowPlaying: NowPlayingController
     private var cancellable: AnyCancellable?
     private var timer: Timer?
+    private var visiblePresentations: Set<UUID> = []
     private var dataTask: URLSessionDataTask?
     private var currentInfo = NowPlayingInfo()
     private var infoReceivedAt = Date()
@@ -101,14 +102,24 @@ final class TeleprompterService: ObservableObject {
                 self?.consume(info)
             }
 
+        consume(nowPlaying.info)
+    }
+
+    func setPresentationVisible(_ visible: Bool, id: UUID) {
+        if visible { visiblePresentations.insert(id) } else { visiblePresentations.remove(id) }
+        if cancellable != nil && !visiblePresentations.isEmpty { consume(nowPlaying.info) }
+        reconcileTimer()
+    }
+
+    private func reconcileTimer() {
+        let needed = cancellable != nil && !visiblePresentations.isEmpty && currentInfo.isPlaying
+        if !needed { timer?.invalidate(); timer = nil; return }
+        guard timer == nil else { return }
         let updateTimer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateCurrentLine()
-            }
+            Task { @MainActor [weak self] in self?.updateCurrentLine() }
         }
         RunLoop.main.add(updateTimer, forMode: .common)
         timer = updateTimer
-        consume(nowPlaying.info)
     }
 
     func stop() {
@@ -144,6 +155,8 @@ final class TeleprompterService: ObservableObject {
     private func consume(_ info: NowPlayingInfo) {
         currentInfo = info
         infoReceivedAt = Date()
+        reconcileTimer()
+        guard !visiblePresentations.isEmpty else { return }
         directSubtitle = info.subtitleText
         let key = trackKey(for: info)
 
