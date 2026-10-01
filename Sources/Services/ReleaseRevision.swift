@@ -31,4 +31,40 @@ enum ReleaseRevision {
     static func isNewer(_ candidate: Int, than installed: Int) -> Bool {
         candidate > 0 && candidate > installed
     }
+
+    /// The major version of a public version ("2.35" is 2).
+    static func major(of version: String) -> Int? {
+        version.split(separator: ".").first.flatMap { Int($0) }
+    }
+
+    struct Candidate: Equatable {
+        let tag: String
+        let body: String?
+        let draft: Bool
+        let prerelease: Bool
+    }
+
+    struct Choice: Equatable {
+        let index: Int
+        let version: String
+        let build: Int
+    }
+
+    /// Pre-release installs (2.x) follow their own major version: the newest
+    /// published release with the same major, whether or not it is still
+    /// marked pre-release. Other majors never qualify, so 2.x is never offered
+    /// 1.x or a future 3.x that may need a newer Mac. Releases with a missing
+    /// or ambiguous build marker are skipped.
+    static func newest(in releases: [Candidate], major: Int) -> Choice? {
+        var best: Choice?
+        for (index, release) in releases.enumerated() where !release.draft {
+            guard let version = version(fromTag: release.tag),
+                  self.major(of: version) == major,
+                  let build = build(in: release.body) else { continue }
+            if best == nil || build > best!.build {
+                best = Choice(index: index, version: version, build: build)
+            }
+        }
+        return best
+    }
 }
