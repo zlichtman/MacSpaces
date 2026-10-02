@@ -8,6 +8,10 @@ struct TeleprompterBarView: View {
     @ObservedObject var settings: NookSettings
     @ObservedObject private var theme = ThemeStore.shared
 
+    var allowsDismissal = true
+
+    @State private var presentationID = UUID()
+
     var body: some View {
         HStack(spacing: 10) {
             Group {
@@ -47,6 +51,7 @@ struct TeleprompterBarView: View {
             }
             .animation(.easeOut(duration: 0.16), value: primaryText)
 
+            if allowsDismissal {
             Button {
                 withAnimation(Design.spring()) {
                     settings.showTeleprompterBar = false
@@ -60,6 +65,7 @@ struct TeleprompterBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Hide Teleprompter")
+            }
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity)
@@ -84,6 +90,8 @@ struct TeleprompterBarView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(theme.notch.accent.opacity(0.18), lineWidth: 0.75)
         }
+        .onAppear { service.setPresentationVisible(true, id: presentationID) }
+        .onDisappear { service.setPresentationVisible(false, id: presentationID) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             service.source.map { "\($0.rawValue): \(primaryText)" }

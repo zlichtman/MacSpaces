@@ -97,13 +97,15 @@ final class BrowserMediaProvider: NowPlayingProvider {
                 }
 
                 var info = NowPlayingInfo()
+                info.sourceName = browser.appName
+                info.sourceBundleID = browser.bundleID
                 info.title = Self.cleanTitle(parts[0], for: url)
                 info.artist = Self.sourceLabel(for: url, browserName: browser.appName)
                 info.sourceURL = url
-                // A supported active tab is the best public signal browsers expose
-                // without requiring Accessibility or JavaScript-from-Apple-Events.
-                // Transport commands still go through MediaRemote.
-                info.isPlaying = true
+                // A tab title does not prove active playback or ownership of
+                // the system transport. Offer Open in Browser, not commands
+                // that could accidentally control a different application.
+                info.isPlaying = false
                 if parts.count > 2 {
                     let playback = parts[2].components(separatedBy: "|||")
                     if playback.count >= 3 {
@@ -131,8 +133,8 @@ final class BrowserMediaProvider: NowPlayingProvider {
         }
     }
 
-    func send(_ command: NowPlayingCommand) {
-        transport.send(command)
+    func send(_ command: NowPlayingCommand, completion: @escaping (Result<Void, PlaybackCommandError>) -> Void) {
+        completion(.failure(.unavailable))
     }
 
     private func activeBrowsers() -> [Browser] {
