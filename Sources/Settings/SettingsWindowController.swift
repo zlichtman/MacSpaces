@@ -20,7 +20,8 @@ final class SettingsWindowController: NSWindowController {
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 880, height: 600)
+        // Comfortable for dragging; tiling can go smaller and the layout adapts.
+        window.minSize = NSSize(width: 720, height: 520)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
         let host = NSHostingView(rootView: SettingsView())
         // Window minSize and user resizing own geometry, not SwiftUI's animated
@@ -64,7 +65,7 @@ final class SettingsWindowController: NSWindowController {
         let usable = screen.visibleFrame
         let size = NSSize(
             width: min(max(window.frame.width, 880), usable.width - 48),
-            height: min(max(window.frame.height, 600), usable.height - 48)
+            height: min(max(window.frame.height, 620), usable.height - 48)
         )
         let origin = NSPoint(
             x: usable.midX - size.width / 2,
