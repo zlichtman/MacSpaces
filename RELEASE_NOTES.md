@@ -1,13 +1,11 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.44
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.44** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.44:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Undo puts a widget back where it came from.** If you remove a Home widget, switch to another Home profile and then press Undo, the widget now returns to its original profile, and MacSpaces shows that profile again.
+- **⌘Delete and ⌥Delete no longer remove widgets.** Only a plain Delete or Forward Delete removes the selected Home widget.
+- **Keys stay with their own display.** With the Nook open on more than one display, Delete and ⌘Z act only on the Nook you're using.
+- **Focus sessions keep time through sleep.** The focus timer counts down to a fixed end time, so a session started before your Mac sleeps finishes on time.

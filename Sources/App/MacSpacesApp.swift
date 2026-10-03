@@ -28,6 +28,8 @@ private struct MenuBarMenu: View {
 
         Divider()
 
+        Button("File Baskets…") { BasketWindowController.shared.show() }
+
         Button("Settings…") {
             SettingsWindowController.shared.show()
         }
@@ -89,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #if DEBUG
         if AppearanceQAHarness.captureIfRequested() { return }
         if FeatureQAHarness.captureIfRequested() { return }
+        if WebsiteDemoCapture.captureIfRequested() { return }
         if VisualQAHarness.captureIfRequested() {
             return
         }
