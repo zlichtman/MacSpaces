@@ -59,7 +59,7 @@ final class NotchManager {
         Publishers.MergeMany([
             powerMonitor.objectWillChange,
             nowPlaying.objectWillChange, timerService.objectWillChange,
-            systemActivityMonitor.objectWillChange,
+            systemActivityMonitor.objectWillChange, MessageActivityState.shared.objectWillChange,
         ])
         .debounce(for: .milliseconds(20), scheduler: DispatchQueue.main)
         .sink { [weak self] _ in
@@ -81,7 +81,7 @@ final class NotchManager {
     func stop() {
         settings.cancelInteractiveReorder()
         cancellables.removeAll()
-        entries.forEach { $0.window.close() }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.close() }
         entries.removeAll()
         isDisplayTransitionActive = false
     }
@@ -95,12 +95,12 @@ final class NotchManager {
         guard !isDisplayTransitionActive else { return }
         isDisplayTransitionActive = true
         settings.cancelInteractiveReorder()
-        entries.forEach { $0.window.orderOut(nil) }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.orderOut(nil) }
     }
 
     private func rebuildWindows() {
         settings.cancelInteractiveReorder()
-        entries.forEach { $0.window.close() }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.close() }
         entries.removeAll()
 
         let screens = DisplayTargeting.screens(
@@ -131,6 +131,7 @@ final class NotchManager {
         let frame = windowFrame(for: viewModel, on: screen)
 
         let window = NotchWindow(contentRect: frame)
+        window.owner = viewModel
         let root = NotchContainerView(viewModel: viewModel)
         window.contentView = NotchHostingView(
             rootView: root,
@@ -139,6 +140,10 @@ final class NotchManager {
                 return viewModel.state == .expanded
                     ? viewModel.expandedSize
                     : viewModel.collapsedSize
+            },
+            topCameraClearance: { [weak viewModel] in
+                guard let viewModel, viewModel.state == .expanded, viewModel.geometry.isHardwareNotch else { return .zero }
+                return CGSize(width: viewModel.geometry.width, height: viewModel.geometry.height)
             },
             fileDragActivationSize: { [weak viewModel] in
                 guard let viewModel else { return .zero }
@@ -169,6 +174,16 @@ final class NotchManager {
         )
         window.setFrame(frame, display: true)
         window.orderFrontRegardless()
+        // A closed Nook must not keep the keyboard (the Terminal and Notes take
+        // it). Reordering hands key status back to the active app's window.
+        viewModel.$state.removeDuplicates().dropFirst()
+            .sink { [weak window] state in
+                guard state == .collapsed, let window, window.isKeyWindow else { return }
+                window.makeFirstResponder(nil)
+                window.orderOut(nil)
+                window.orderFrontRegardless()
+            }
+            .store(in: &cancellables)
         return Entry(window: window, viewModel: viewModel, screen: screen)
     }
 
@@ -182,8 +197,15 @@ final class NotchManager {
     }
 
     private func windowFrame(for viewModel: NotchViewModel, on screen: NSScreen) -> NSRect {
-        let surfaceWidth = max(viewModel.expandedSize.width, viewModel.collapsedSize.width)
-        let surfaceHeight = max(viewModel.expandedSize.height, viewModel.collapsedSize.height)
+        // Reserve every app page so navigation never clips a larger page or
+        // moves the host window while the user is interacting with the dock.
+        let pageSizes = NotchTab.allCases.map {
+            NotchViewModel.fittedSize(widgets: settings.widgets, tab: $0,
+                geometry: viewModel.geometry, availableWidth: screen.frame.width,
+                showsLyrics: settings.showTeleprompterBar, sizes: settings.widgetSizes)
+        }
+        let surfaceWidth = max(pageSizes.map(\.width).max() ?? 0, viewModel.collapsedSize.width)
+        let surfaceHeight = max(pageSizes.map(\.height).max() ?? 0, viewModel.collapsedSize.height)
         let width = surfaceWidth + 52
         let height = surfaceHeight + 38
         return NSRect(

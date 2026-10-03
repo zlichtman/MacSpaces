@@ -1,13 +1,15 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.45
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.45** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.45:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **New Terminal widget.** Run quick commands right in the Nook: type `brew install …`, press Return, and the output appears below, colours and progress bars included. Swipe up on the command bar (or press ↑) for earlier commands. The command keeps running after the Nook closes, so reopen it to check on the result. Click the output to answer a prompt such as a password. Add it from Home → Add Widget → Tools.
+- **A roomier Music page.** Lyrics get their own column beside the cover, with the playback controls under the artwork and the timeline alongside them. Long titles and lyrics wrap without moving the controls.
+- **Mission Control no longer opens the Nook.** Reaching for the Spaces bar at the top of the screen won't open the Nook by hover or scroll; clicking the notch still does.
+- **Lyrics on Home keep up.** The Media widget's lyric no longer gets stuck on the previous song until you open the Music page.
+- **Smoother closing.** Closing the Nook no longer stops a page's services mid-animation, which could cause a brief stutter; they stay ready for a few seconds in case you reopen.
+- When the Nook closes, your typing goes back to the app you were using.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+The Terminal widget uses SwiftTerm by Miguel de Icaza (MIT licence).

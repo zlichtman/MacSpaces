@@ -19,90 +19,75 @@ enum NookWidgetKind: String, Codable, CaseIterable, Identifiable {
     case audioControls
     case systemStats
     case keepAwake
+    case terminal
+    // The Tsukumo quick bar ("agents") was removed in 2.38; saved profiles that
+    // list it drop it on decode.
+    case notifications
 
+    var isQuickBar: Bool { self == .notifications }
     var id: String { rawValue }
 
-    var title: String {
+    var featureID: FeatureID { FeatureID(rawValue: rawValue)! }
+    var descriptor: FeatureDescriptor { FeatureCatalog.descriptor(featureID) }
+    var title: String { descriptor.title }
+    var systemImage: String { descriptor.symbol }
+    var preferredWidth: CGFloat { CGFloat(descriptor.preferredWidth) }
+    var canUseCompactRow: Bool { descriptor.compact }
+
+}
+
+/// How much room a widget takes on Home. Adjacent small widgets share a
+/// column, one above the other, so the user decides which widgets pair up.
+enum NookWidgetSize: String, Codable, CaseIterable, Identifiable {
+    case small, medium, large
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+extension NookWidgetKind {
+    var supportedSizes: [NookWidgetSize] {
         switch self {
-        case .media: return "Media"
-        case .shortcuts: return "Shortcuts"
-        case .calendar: return "Calendar"
-        case .todos: return "Todos"
-        case .timer: return "Timer"
-        case .notes: return "Notes"
-        case .mirror: return "Mirror"
-        case .battery: return "Battery"
-        case .clock: return "Clock"
-        case .weather: return "Weather"
-        case .clipboard: return "Clipboard"
-        case .pomodoro: return "Pomodoro"
-        case .quickActions: return "Quick Actions"
-        case .audioControls: return "Audio Controls"
-        case .systemStats: return "System Stats"
-        case .keepAwake: return "Keep Awake"
+        case .mirror, .shortcuts, .quickActions: return [.medium, .large]
+        case .notifications: return [.medium]
+        case .terminal: return [.medium, .large]
+        default: return NookWidgetSize.allCases
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .media: return "music.note"
-        case .shortcuts: return "bolt.fill"
-        case .calendar: return "calendar"
-        case .todos: return "checklist"
-        case .timer: return "timer"
-        case .notes: return "note.text"
-        case .mirror: return "web.camera"
-        case .battery: return "battery.100percent"
-        case .clock: return "clock"
-        case .weather: return "cloud.sun"
-        case .clipboard: return "doc.on.clipboard"
-        case .pomodoro: return "timer.circle"
-        case .quickActions: return "bolt"
-        case .audioControls: return "slider.horizontal.3"
-        case .systemStats: return "chart.xyaxis.line"
-        case .keepAwake: return "cup.and.saucer"
-        }
+    /// Widgets that have always stacked keep doing so for existing profiles.
+    var defaultSize: NookWidgetSize { canUseCompactRow ? .small : .medium }
+
+    func resolvedSize(_ size: NookWidgetSize?) -> NookWidgetSize {
+        size.flatMap { supportedSizes.contains($0) ? $0 : nil } ?? defaultSize
     }
 
-    var preferredWidth: CGFloat {
-        switch self {
-        case .media: return 260
-        case .calendar, .todos, .notes, .mirror: return 180
-        case .shortcuts: return 150
-        case .timer, .battery, .clock, .weather, .pomodoro: return 116
-        case .clipboard: return 180
-        case .quickActions: return 150
-        case .audioControls: return 250
-        case .systemStats, .keepAwake: return 200
-        }
-    }
-
-    var canUseCompactRow: Bool {
-        switch self {
-        case .timer, .battery, .clock, .weather, .pomodoro:
-            return true
-        default:
-            return false
+    func width(for size: NookWidgetSize) -> CGFloat {
+        switch (size, canUseCompactRow) {
+        case (.small, true): return preferredWidth
+        case (.small, false): return self == .media ? 200 : 160
+        case (.medium, true): return 176
+        case (.medium, false): return preferredWidth
+        case (.large, true): return 300
+        case (.large, false): return self == .calendar ? 380 : (preferredWidth * 1.5).rounded()
         }
     }
 }
 
 struct NookLayoutItem: Identifiable {
     let kinds: [NookWidgetKind]
+    let width: CGFloat
 
     var id: String { kinds.map(\.rawValue).joined(separator: "+") }
     var isStack: Bool { kinds.count == 2 }
-
-    var width: CGFloat {
-        kinds.map(\.preferredWidth).max() ?? 0
-    }
 }
 
 extension Array where Element == NookWidgetKind {
     /// Expand columns proportionally to occupy header-required space. Profiles
     /// wider than the available area retain their natural widths and scroll.
-    func fittedNookWidths(availableWidth: CGFloat, spacing: CGFloat = 10) -> [NookWidgetKind: CGFloat] {
-        let columns = nookLayoutItems()
+    func fittedNookWidths(availableWidth: CGFloat, spacing: CGFloat = 10,
+                          sizes: [NookWidgetKind: NookWidgetSize] = [:]) -> [NookWidgetKind: CGFloat] {
+        let columns = nookLayoutItems(sizes: sizes)
         let naturalWidth = columns.reduce(CGFloat.zero) { $0 + $1.width }
         guard naturalWidth > 0 else { return [:] }
         let gaps = CGFloat(Swift.max(0, columns.count - 1)) * spacing
@@ -112,19 +97,24 @@ extension Array where Element == NookWidgetKind {
         }, uniquingKeysWith: { first, _ in first })
     }
 
-    func nookLayoutItems() -> [NookLayoutItem] {
+    /// Consecutive small widgets pair into one stacked column; a small
+    /// widget without a partner keeps its narrow width at full height.
+    func nookLayoutItems(sizes: [NookWidgetKind: NookWidgetSize] = [:]) -> [NookLayoutItem] {
         var result: [NookLayoutItem] = []
         var index = startIndex
         while index < endIndex {
             let current = self[index]
+            let currentSize = current.resolvedSize(sizes[current])
             let nextIndex = self.index(after: index)
-            if current.canUseCompactRow,
+            if currentSize == .small,
                nextIndex < endIndex,
-               self[nextIndex].canUseCompactRow {
-                result.append(NookLayoutItem(kinds: [current, self[nextIndex]]))
+               self[nextIndex].resolvedSize(sizes[self[nextIndex]]) == .small {
+                let next = self[nextIndex]
+                result.append(NookLayoutItem(kinds: [current, next],
+                                             width: Swift.max(current.width(for: .small), next.width(for: .small))))
                 index = self.index(after: nextIndex)
             } else {
-                result.append(NookLayoutItem(kinds: [current]))
+                result.append(NookLayoutItem(kinds: [current], width: current.width(for: currentSize)))
                 index = nextIndex
             }
         }
@@ -142,23 +132,35 @@ struct NookProfile: Identifiable, Codable, Equatable {
     /// Visual treatment is owned by the widget rather than the whole surface.
     /// Optional for seamless migration from existing profiles.
     var widgetStyles: [String: WidgetVisualStyle]? = nil
+    /// Chosen widget sizes; missing entries use each widget's default.
+    var widgetSizes: [String: NookWidgetSize]? = nil
+    /// The SF Symbol for this Home in the dock; nil uses a default by position.
+    var symbol: String? = nil
+
+    /// Symbols offered for a Home; the first six are the defaults, by position.
+    static let symbols = ["square.grid.2x2.fill", "circle.grid.2x2.fill", "square.stack.3d.up.fill",
+                          "rectangle.split.3x1.fill", "square.grid.3x2.fill", "rectangle.grid.2x2.fill",
+                          "house.fill", "briefcase.fill", "music.note.house.fill", "moon.stars.fill",
+                          "sparkles", "book.fill", "gamecontroller.fill", "cup.and.saucer.fill"]
 
     init(
         id: UUID,
         name: String,
         widgets: [NookWidgetKind],
         widgetWidths: [String: Double]? = nil,
-        widgetStyles: [String: WidgetVisualStyle]? = nil
+        widgetStyles: [String: WidgetVisualStyle]? = nil,
+        widgetSizes: [String: NookWidgetSize]? = nil
     ) {
         self.id = id
         self.name = name
         self.widgets = widgets
         self.widgetWidths = widgetWidths
         self.widgetStyles = widgetStyles
+        self.widgetSizes = widgetSizes
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, widgets, widgetWidths, widgetStyles
+        case id, name, widgets, widgetWidths, widgetStyles, widgetSizes, symbol
     }
 
     /// A widget kind this build cannot decode is dropped rather than failing
@@ -190,6 +192,12 @@ struct NookProfile: Identifiable, Codable, Equatable {
             [String: WidgetVisualStyle].self,
             forKey: .widgetStyles
         )) ?? nil
+        // An unknown size from a newer build falls back to defaults.
+        widgetSizes = (try? container.decodeIfPresent(
+            [String: NookWidgetSize].self,
+            forKey: .widgetSizes
+        )) ?? nil
+        symbol = try? container.decodeIfPresent(String.self, forKey: .symbol)
     }
 }
 
@@ -199,6 +207,7 @@ struct NookProfile: Identifiable, Codable, Equatable {
 @MainActor
 final class NookSettings: ObservableObject {
     static let shared = NookSettings()
+    static let starterWidgets: [NookWidgetKind] = [.media, .timer, .clock, .mirror, .systemStats]
 
     @Published var expandOnHover: Bool {
         didSet { defaults.set(expandOnHover, forKey: Keys.expandOnHover) }
@@ -226,23 +235,6 @@ final class NookSettings: ObservableObject {
 
     @Published var showTimerLiveActivity: Bool {
         didSet { defaults.set(showTimerLiveActivity, forKey: Keys.showTimerLiveActivity) }
-    }
-
-    @Published var showVolumeLiveActivity: Bool {
-        didSet { defaults.set(showVolumeLiveActivity, forKey: Keys.showVolumeLiveActivity) }
-    }
-
-    @Published var showBrightnessLiveActivity: Bool {
-        didSet { defaults.set(showBrightnessLiveActivity, forKey: Keys.showBrightnessLiveActivity) }
-    }
-
-    @Published var showKeyboardBrightnessLiveActivity: Bool {
-        didSet {
-            defaults.set(
-                showKeyboardBrightnessLiveActivity,
-                forKey: Keys.showKeyboardBrightnessLiveActivity
-            )
-        }
     }
 
     @Published var showMicrophoneLiveActivity: Bool {
@@ -287,6 +279,11 @@ final class NookSettings: ObservableObject {
         didSet { scheduleProfileSave() }
     }
 
+    /// App pages in the dock, in order. Home and Settings are always present.
+    @Published var dockApps: [NotchTab] {
+        didSet { defaults.set(dockApps.map(\.rawValue), forKey: Keys.dockApps) }
+    }
+
     @Published var activeProfileID: UUID {
         didSet { scheduleProfileSave() }
     }
@@ -300,9 +297,6 @@ final class NookSettings: ObservableObject {
         static let showMusicLiveActivity = "showMusicLiveActivity"
         static let showPowerLiveActivity = "showPowerLiveActivity"
         static let showTimerLiveActivity = "showTimerLiveActivity"
-        static let showVolumeLiveActivity = "showVolumeLiveActivity"
-        static let showBrightnessLiveActivity = "showBrightnessLiveActivity"
-        static let showKeyboardBrightnessLiveActivity = "showKeyboardBrightnessLiveActivity"
         static let showMicrophoneLiveActivity = "showMicrophoneLiveActivity"
         static let showFocusLiveActivity = "showFocusLiveActivity"
         static let showTeleprompterBar = "showTeleprompterBar"
@@ -311,6 +305,7 @@ final class NookSettings: ObservableObject {
         static let expandedWidth = "nookExpandedWidth"
         static let expandedHeight = "nookExpandedHeight"
         static let fitWidthToProfile = "nookFitWidthToProfile"
+        static let dockApps = "dockApps"
         static let legacyWidgets = "nookWidgets"
         static let profiles = "nookProfilesV2"
         static let profilesBackup = "nookProfilesV2.corrupt"
@@ -321,11 +316,13 @@ final class NookSettings: ObservableObject {
         var activeProfileID: UUID
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private var profileSaveWorkItem: DispatchWorkItem?
     private(set) var isInteractiveReorderActive = false
 
-    private init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let hasSavedConfiguration = defaults.data(forKey: Keys.profiles) != nil || defaults.data(forKey: Keys.legacyWidgets) != nil
         let persistedDisplayMode = defaults.string(forKey: Keys.displayMode)
         let legacyShowOnAllDisplays = defaults.bool(forKey: Keys.showOnAllDisplays)
         defaults.register(defaults: [
@@ -336,12 +333,9 @@ final class NookSettings: ObservableObject {
             Keys.showMusicLiveActivity: true,
             Keys.showPowerLiveActivity: true,
             Keys.showTimerLiveActivity: true,
-            Keys.showVolumeLiveActivity: true,
-            Keys.showBrightnessLiveActivity: true,
-            Keys.showKeyboardBrightnessLiveActivity: true,
             Keys.showMicrophoneLiveActivity: true,
             Keys.showFocusLiveActivity: true,
-            Keys.showTeleprompterBar: false,
+            Keys.showTeleprompterBar: !hasSavedConfiguration,
             Keys.scrollGesturesEnabled: true,
             Keys.openTrayOnFileDrag: true,
             Keys.expandedWidth: 860.0,
@@ -358,19 +352,21 @@ final class NookSettings: ObservableObject {
         showMusicLiveActivity = defaults.bool(forKey: Keys.showMusicLiveActivity)
         showPowerLiveActivity = defaults.bool(forKey: Keys.showPowerLiveActivity)
         showTimerLiveActivity = defaults.bool(forKey: Keys.showTimerLiveActivity)
-        showVolumeLiveActivity = defaults.bool(forKey: Keys.showVolumeLiveActivity)
-        showBrightnessLiveActivity = defaults.bool(forKey: Keys.showBrightnessLiveActivity)
-        showKeyboardBrightnessLiveActivity = defaults.bool(
-            forKey: Keys.showKeyboardBrightnessLiveActivity
-        )
         showMicrophoneLiveActivity = defaults.bool(forKey: Keys.showMicrophoneLiveActivity)
         showFocusLiveActivity = defaults.bool(forKey: Keys.showFocusLiveActivity)
-        showTeleprompterBar = defaults.bool(forKey: Keys.showTeleprompterBar)
+        let initialCaptions = defaults.bool(forKey: Keys.showTeleprompterBar)
+        showTeleprompterBar = initialCaptions
+        if !hasSavedConfiguration { defaults.set(initialCaptions, forKey: Keys.showTeleprompterBar) }
         scrollGesturesEnabled = defaults.bool(forKey: Keys.scrollGesturesEnabled)
         openTrayOnFileDrag = defaults.bool(forKey: Keys.openTrayOnFileDrag)
         expandedWidth = defaults.double(forKey: Keys.expandedWidth)
         expandedHeight = defaults.double(forKey: Keys.expandedHeight)
         fitWidthToProfile = defaults.bool(forKey: Keys.fitWidthToProfile)
+        // Unknown pages from a newer build are skipped, never fatal.
+        var seenPages = Set<NotchTab>()
+        dockApps = (defaults.stringArray(forKey: Keys.dockApps)?
+            .compactMap(NotchTab.init(rawValue:))
+            .filter { NotchTab.appPages.contains($0) && seenPages.insert($0).inserted }) ?? NotchTab.defaultDock
 
         let storedProfileData = defaults.data(forKey: Keys.profiles)
         let decodedProfiles = storedProfileData.flatMap {
@@ -388,17 +384,17 @@ final class NookSettings: ObservableObject {
             profiles = persisted.profiles
             activeProfileID = persisted.activeProfileID
         } else if let legacyData = defaults.data(forKey: Keys.legacyWidgets),
-                  let legacyWidgets = try? JSONDecoder().decode([NookWidgetKind].self, from: legacyData),
-                  !legacyWidgets.isEmpty {
+                  let legacyWidgets = try? JSONDecoder().decode([NookWidgetKind].self, from: legacyData) {
             let migrated = NookProfile(id: UUID(), name: "Current", widgets: legacyWidgets)
             profiles = [migrated]
             activeProfileID = migrated.id
         } else {
-            // Fresh setup begins empty so the user intentionally composes the
-            // Nook instead of deleting a demo layout.
-            let empty = NookProfile(id: UUID(), name: "My Nook", widgets: [])
-            profiles = [empty]
-            activeProfileID = empty.id
+            // Only genuinely new configurations receive the starter layout.
+            // Unreadable saved profiles remain recoverable without enabling features.
+            let starter = NookProfile(id: UUID(), name: "My Nook",
+                                      widgets: hasSavedConfiguration ? [] : Self.starterWidgets)
+            profiles = [starter]
+            activeProfileID = starter.id
         }
 
         if !profiles.contains(where: { $0.id == activeProfileID }) {
@@ -421,6 +417,21 @@ final class NookSettings: ObservableObject {
         }
     }
 
+    func setDockApp(_ page: NotchTab, shown: Bool) {
+        guard NotchTab.appPages.contains(page) else { return }
+        if shown {
+            guard !dockApps.contains(page) else { return }
+            dockApps.append(page)
+        } else {
+            dockApps.removeAll { $0 == page }
+        }
+    }
+
+    func moveDockApp(_ page: NotchTab, offset: Int) {
+        guard let index = dockApps.firstIndex(of: page), dockApps.indices.contains(index + offset) else { return }
+        dockApps.swapAt(index, index + offset)
+    }
+
     func setEnabled(_ enabled: Bool, for kind: NookWidgetKind) {
         if enabled {
             guard !widgets.contains(kind) else { return }
@@ -428,6 +439,26 @@ final class NookSettings: ObservableObject {
         } else {
             widgets.removeAll { $0 == kind }
         }
+    }
+
+    var widgetSizes: [NookWidgetKind: NookWidgetSize] {
+        var sizes: [NookWidgetKind: NookWidgetSize] = [:]
+        for (raw, size) in activeProfile.widgetSizes ?? [:] {
+            if let kind = NookWidgetKind(rawValue: raw) { sizes[kind] = size }
+        }
+        return sizes
+    }
+
+    func size(for kind: NookWidgetKind) -> NookWidgetSize {
+        kind.resolvedSize(widgetSizes[kind])
+    }
+
+    func setSize(_ size: NookWidgetSize, for kind: NookWidgetKind) {
+        guard kind.supportedSizes.contains(size),
+              let index = profiles.firstIndex(where: { $0.id == activeProfileID }) else { return }
+        var sizes = profiles[index].widgetSizes ?? [:]
+        sizes[kind.rawValue] = size == kind.defaultSize ? nil : size
+        profiles[index].widgetSizes = sizes.isEmpty ? nil : sizes
     }
 
     func widgetStyle(for kind: NookWidgetKind) -> WidgetVisualStyle {
@@ -498,10 +529,23 @@ final class NookSettings: ObservableObject {
             name: name,
             widgets: copyingCurrent ? activeProfile.widgets : [],
             widgetWidths: copyingCurrent ? activeProfile.widgetWidths : nil,
-            widgetStyles: copyingCurrent ? activeProfile.widgetStyles : nil
+            widgetStyles: copyingCurrent ? activeProfile.widgetStyles : nil,
+            widgetSizes: copyingCurrent ? activeProfile.widgetSizes : nil
         )
         profiles.append(profile)
         activeProfileID = profile.id
+    }
+
+    /// The dock symbol for a Home: its own choice, or a default by position.
+    func symbol(for profile: NookProfile) -> String {
+        if let symbol = profile.symbol { return symbol }
+        let index = profiles.firstIndex(where: { $0.id == profile.id }) ?? 0
+        return NookProfile.symbols[index % 6]
+    }
+
+    func setSymbol(_ symbol: String, for profile: NookProfile) {
+        guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+        profiles[index].symbol = symbol
     }
 
     func renameProfile(_ profile: NookProfile, to name: String) {
@@ -517,9 +561,7 @@ final class NookSettings: ObservableObject {
         }
     }
 
-    /// Restores the shipped OpenNotch configuration. Reset intentionally
-    /// produces one empty profile, matching first launch: the user composes
-    /// the Nook rather than inheriting demo widgets.
+    /// Explicit reset restores the same editable starter layout as first launch.
     func resetToDefaults() {
         profileSaveWorkItem?.cancel()
         profileSaveWorkItem = nil
@@ -532,19 +574,17 @@ final class NookSettings: ObservableObject {
         showMusicLiveActivity = true
         showPowerLiveActivity = true
         showTimerLiveActivity = true
-        showVolumeLiveActivity = true
-        showBrightnessLiveActivity = true
-        showKeyboardBrightnessLiveActivity = true
         showMicrophoneLiveActivity = true
         showFocusLiveActivity = true
-        showTeleprompterBar = false
+        showTeleprompterBar = true
         scrollGesturesEnabled = true
         openTrayOnFileDrag = true
         expandedWidth = 860
         expandedHeight = 250
         fitWidthToProfile = true
+        dockApps = NotchTab.defaultDock
 
-        let profile = NookProfile(id: UUID(), name: "My Nook", widgets: [])
+        let profile = NookProfile(id: UUID(), name: "My Nook", widgets: Self.starterWidgets)
         profiles = [profile]
         activeProfileID = profile.id
         flushPersistence()
