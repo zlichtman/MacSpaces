@@ -3,6 +3,10 @@ import SwiftUI
 
 /// Borderless, non-activating panel that floats above the menu bar and hosts the notch UI.
 final class NotchWindow: NSPanel {
+    /// The Nook model this window shows, so app-wide key monitors act only on
+    /// their own display. Untyped so the window compiles on its own in checks.
+    weak var owner: AnyObject?
+
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,
                    styleMask: [.borderless, .nonactivatingPanel],
@@ -32,6 +36,7 @@ final class NotchWindow: NSPanel {
 /// not become an invisible mouse trigger over the app underneath.
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     private let interactiveSize: () -> CGSize
+    private let topCameraClearance: () -> CGSize
     private let fileDragActivationSize: () -> CGSize
     private let fileDragEntered: () -> Void
     private let fileDragExited: () -> Void
@@ -40,6 +45,7 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
 
     required init(rootView: Content) {
         self.interactiveSize = { .zero }
+        self.topCameraClearance = { .zero }
         self.fileDragActivationSize = { .zero }
         self.fileDragEntered = {}
         self.fileDragExited = {}
@@ -52,12 +58,14 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     init(
         rootView: Content,
         interactiveSize: @escaping () -> CGSize,
+        topCameraClearance: @escaping () -> CGSize = { .zero },
         fileDragActivationSize: @escaping () -> CGSize,
         fileDragEntered: @escaping () -> Void,
         fileDragExited: @escaping () -> Void,
         fileURLsDropped: @escaping ([URL]) -> Bool
     ) {
         self.interactiveSize = interactiveSize
+        self.topCameraClearance = topCameraClearance
         self.fileDragActivationSize = fileDragActivationSize
         self.fileDragEntered = fileDragEntered
         self.fileDragExited = fileDragExited
@@ -91,8 +99,14 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
             width: size.width,
             height: size.height
         )
-        guard interactiveFrame.contains(point) else { return nil }
+        guard interactiveFrame.contains(point), !isInTransparentShoulder(point) else { return nil }
         return super.hitTest(point)
+    }
+
+    private func isInTransparentShoulder(_ point: NSPoint) -> Bool {
+        let camera = topCameraClearance()
+        return camera.height > 0 && point.y > bounds.maxY - camera.height
+            && abs(point.x - bounds.midX) > camera.width / 2
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -150,7 +164,8 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
             width: size.width,
             height: size.height
         )
-        return activationFrame.contains(convert(sender.draggingLocation, from: nil))
+        let point = convert(sender.draggingLocation, from: nil)
+        return activationFrame.contains(point) && !isInTransparentShoulder(point)
     }
 
     private static func containsFileURLs(_ pasteboard: NSPasteboard) -> Bool {
