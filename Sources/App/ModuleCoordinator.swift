@@ -10,6 +10,7 @@ final class ModuleCoordinator {
     private var cancellables: Set<AnyCancellable> = []
 
     func start() {
+        AgentPowerAlert.shared.observe(AppServices.shared.powerMonitor)
         apply()
         settings.$notchEnabled.dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &cancellables)

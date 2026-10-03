@@ -1,13 +1,12 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.46
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.46** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.46:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Lyric styles.** Choose how the Music page sets each lyric in Settings → Appearance → Lyrics: Classic, Lyric poster (the line's boldest word set large), Stanza stage (the lines before and after rolling past a spotlight), Phrase choreography (each word steps in), Waterformed (letters riding a swell over their reflection) or Psychedelic bloom (shifting, glowing colour). Every style uses your theme's colours; the moving ones respect Reduce Motion and the "Animate theme effects" setting.
+- **New dock pages.** Terminal is now a full page as well as a widget, sharing the same shell. Shortcuts lists all your Shortcuts with search, beside the Mac quick actions. Mirror gives the camera a larger preview. Add them in Settings → Widgets.
+- **Mission Control closes the Nook.** An open Nook now steps aside when Mission Control appears, instead of covering the Spaces bar.
+- The Add Widget list is in alphabetical order.
+- The Audio (per-app volume) widget has been removed. If it was on your Home, it's simply gone; everything else stays as you set it.
