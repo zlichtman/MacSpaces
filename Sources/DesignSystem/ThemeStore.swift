@@ -305,6 +305,20 @@ final class ThemeStore: ObservableObject {
     @Published var familyAccentHex: String? {
         didSet { defaults.set(familyAccentHex, forKey: "theme.familyAccentHex") }
     }
+    /// Draws the theme's effect (petals, rain, rainbow keys…) behind the open Nook.
+    @Published var showsPatterns = true {
+        didSet { defaults.set(showsPatterns, forKey: "theme.patterns") }
+    }
+    /// Lets effects move while the Nook is open. Reduce Motion always holds a still frame.
+    /// How the Music page sets lyrics (Settings → Appearance → Lyrics).
+    @Published var lyricStyle: LyricStyle = .classic {
+        didSet { defaults.set(lyricStyle.rawValue, forKey: "lyrics.style") }
+    }
+    @Published var animatesEffects = true {
+        didSet { defaults.set(animatesEffects, forKey: "theme.effects.animate") }
+    }
+    /// The current theme's pattern, when it has one and patterns are on.
+    var activeMotif: ThemeMotif? { showsPatterns ? family?.motif : nil }
     @Published private(set) var systemIsDark = false
     private var appearanceObservation: NSKeyValueObservation?
     var resolvedScheme: ColorScheme { appearanceMode.scheme(systemIsDark: systemIsDark) }
@@ -431,8 +445,11 @@ final class ThemeStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         familyAccentHex = defaults.string(forKey: "theme.familyAccentHex")
+        showsPatterns = defaults.object(forKey: "theme.patterns") as? Bool ?? true
+        animatesEffects = defaults.object(forKey: "theme.effects.animate") as? Bool ?? true
+        lyricStyle = LyricStyle(rawValue: defaults.string(forKey: "lyrics.style") ?? "") ?? .classic
         let hadSavedPalette = defaults.object(forKey: Keys.notchPreset) != nil
-        let savedFamily = defaults.string(forKey: "theme.family").flatMap(ThemeFamily.init(rawValue:))
+        let savedFamily = defaults.string(forKey: "theme.family").flatMap { ThemeFamily(saved: $0) }
         family = savedFamily ?? (hadSavedPalette ? nil : .macspaces)
         appearanceMode = AppearanceMode(rawValue: defaults.string(forKey: "theme.appearanceMode") ?? "") ?? .system
         defaults.register(defaults: [
@@ -569,7 +586,16 @@ final class ThemeStore: ObservableObject {
         family = selection
     }
 
+    /// Custom theme colours, stored as hex. Changing either refreshes the Nook.
+    @Published var customThemeBackground: String = CustomThemeColors.background {
+        didSet { defaults.set(customThemeBackground, forKey: CustomThemeColors.backgroundKey) }
+    }
+    @Published var customThemeAccent: String = CustomThemeColors.accent {
+        didSet { defaults.set(customThemeAccent, forKey: CustomThemeColors.accentKey) }
+    }
+
     private func familyTokens(_ family: ThemeFamily) -> ThemeTokens {
+        let resolvedScheme = family.fixedScheme ?? self.resolvedScheme
         let colors = family.palette(resolvedScheme)
         let accent = colors.color(colors.accent)
         let foreground = colors.color(colors.foreground)
@@ -817,12 +843,14 @@ struct SurfacePaletteMenuContent: View {
         Picker("Appearance", selection: $theme.appearanceMode) {
             ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
-        .disabled(theme.family == nil)
+        .disabled(theme.family == nil || theme.family == .custom)
         Divider()
-        ForEach(ThemeFamily.signature) { family in themeButton(family) }
+        ForEach(ThemeCollection.core.families) { family in themeButton(family) }
         Divider()
-        Menu("Palettes") {
-            ForEach(ThemeFamily.palettes) { family in themeButton(family) }
+        ForEach(ThemeCollection.allCases.filter { $0 != .core }) { collection in
+            Menu(collection.title) {
+                ForEach(collection.families) { family in themeButton(family) }
+            }
         }
         if theme.notchPreset == .custom {
             Button {
