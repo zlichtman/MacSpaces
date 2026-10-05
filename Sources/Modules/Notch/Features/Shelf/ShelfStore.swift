@@ -65,14 +65,25 @@ final class ShelfStore: ObservableObject {
         }
     }
 
-    private static var persistenceURL: URL {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MacSpaces", isDirectory: true)
+    private let basketID: UUID?
+    private var persistenceURL: URL {
+        let root = Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces"
+            ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            : FileManager.default.temporaryDirectory.appendingPathComponent("MacSpacesFixtures/" + (Bundle.main.bundleIdentifier ?? "tests"))
+        let directory = root.appendingPathComponent("MacSpaces", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory.appendingPathComponent("tray.json")
+        return directory.appendingPathComponent(basketID.map { "basket-" + $0.uuidString + ".json" } ?? "tray.json")
     }
 
-    init() {
+    /// Deletes a removed basket's saved list. It holds references only, so the
+    /// files themselves are untouched.
+    func forgetSavedList() {
+        guard basketID != nil else { return }
+        try? FileManager.default.removeItem(at: persistenceURL)
+    }
+
+    init(basketID: UUID? = nil) {
+        self.basketID = basketID
         load()
         items.forEach(requestThumbnail(for:))
     }
@@ -309,7 +320,7 @@ final class ShelfStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: Self.persistenceURL),
+        guard let data = try? Data(contentsOf: persistenceURL),
               let decoded = try? JSONDecoder().decode([DecodableItem].self, from: data) else {
             return
         }
@@ -349,6 +360,6 @@ final class ShelfStore: ObservableObject {
             )
         }
         guard let data = try? JSONEncoder().encode(persisted) else { return }
-        try? data.write(to: Self.persistenceURL, options: .atomic)
+        try? data.write(to: persistenceURL, options: .atomic)
     }
 }

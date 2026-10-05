@@ -16,25 +16,24 @@ guard let context = NSGraphicsContext.current?.cgContext else {
 context.setAllowsAntialiasing(true)
 context.setShouldAntialias(true)
 
-// A flat, full-bleed black plate. The transparent outer margin keeps the icon
-// clean in Finder without the square image edge that the previous artwork had.
-let plate = NSBezierPath(
-    roundedRect: NSRect(x: 64, y: 64, width: 896, height: 896),
-    xRadius: 206,
-    yRadius: 206
-)
+// Full-bleed black art for MacSpacesIcon-master.png (Settings rounds it).
+// The app icon itself is Sources/Resources/AppIcon.icon: an Icon Composer
+// file whose layers (written below) are the slashes over a black image. The
+// black is an image layer, not the icon fill, because macOS 26 lightens a
+// solid fill to dark grey. macOS 26 draws the file natively; Xcode generates
+// the rounded icon macOS 15 uses.
 NSColor.black.setFill()
-plate.fill()
+NSRect(origin: .zero, size: canvas).fill()
 
 // A direct monochrome "//" mark. There are no
 // gradients, shadows, highlights, or faux-device details.
 NSColor.white.setStroke()
-for centerX in [402.0, 622.0] {
+for centerX in [397.0, 627.0] {
     let slash = NSBezierPath()
-    slash.lineWidth = 96
+    slash.lineWidth = 100
     slash.lineCapStyle = .round
-    slash.move(to: NSPoint(x: centerX - 92, y: 292))
-    slash.line(to: NSPoint(x: centerX + 92, y: 732))
+    slash.move(to: NSPoint(x: centerX - 96, y: 290))
+    slash.line(to: NSPoint(x: centerX + 96, y: 734))
     slash.stroke()
 }
 
@@ -54,3 +53,40 @@ try FileManager.default.createDirectory(
 )
 try png.write(to: outputURL, options: .atomic)
 print(outputURL.path)
+
+// The Icon Composer layer: the same slashes on a transparent canvas.
+let layer = NSBitmapImageRep(
+    bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024, bitsPerSample: 8,
+    samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+    bytesPerRow: 0, bitsPerPixel: 0
+)!
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: layer)
+NSColor.white.setStroke()
+for centerX in [397.0, 627.0] {
+    let slash = NSBezierPath()
+    slash.lineWidth = 100
+    slash.lineCapStyle = .round
+    slash.move(to: NSPoint(x: centerX - 96, y: 290))
+    slash.line(to: NSPoint(x: centerX + 96, y: 734))
+    slash.stroke()
+}
+NSGraphicsContext.restoreGraphicsState()
+let layerURL = URL(fileURLWithPath: "Sources/Resources/AppIcon.icon/Assets/slashes.png", relativeTo: projectRoot)
+try FileManager.default.createDirectory(at: layerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+try layer.representation(using: .png, properties: [:])!.write(to: layerURL, options: .atomic)
+print(layerURL.path)
+
+let background = NSBitmapImageRep(
+    bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024, bitsPerSample: 8,
+    samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+    bytesPerRow: 0, bitsPerPixel: 0
+)!
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: background)
+NSColor.black.setFill()
+NSRect(origin: .zero, size: canvas).fill()
+NSGraphicsContext.restoreGraphicsState()
+let backgroundURL = layerURL.deletingLastPathComponent().appendingPathComponent("black.png")
+try background.representation(using: .png, properties: [:])!.write(to: backgroundURL, options: .atomic)
+print(backgroundURL.path)
