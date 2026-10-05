@@ -42,6 +42,7 @@ final class TeleprompterService: ObservableObject {
         let duration: Double
         let plainLyrics: String?
         let syncedLyrics: String?
+        var instrumental: Bool? = false
     }
 
     private struct PlainLyricsPayload: Decodable {
@@ -82,12 +83,19 @@ final class TeleprompterService: ObservableObject {
     private let nowPlaying: NowPlayingController
     private var cancellable: AnyCancellable?
     private var timer: Timer?
+    private var visiblePresentations: Set<UUID> = []
     private var dataTask: URLSessionDataTask?
     private var currentInfo = NowPlayingInfo()
-    private var infoReceivedAt = Date()
+    /// How far ahead of the playhead a lyric line switches.
+    static let leadTime: TimeInterval = 0.25
     private var loadedKey = ""
     private var lines: [TimedLine] = []
+    /// Synchronized lines carry real timings, so the intro and instrumental
+    /// breaks clear the lyric instead of holding a line that isn't being sung.
+    private var linesAreTimed = false
     private var directSubtitle = ""
+    /// A timed song's silence (intro, instrumental break): nothing is shown.
+    nonisolated static let rest = ""
 
     init(nowPlaying: NowPlayingController) {
         self.nowPlaying = nowPlaying
@@ -101,14 +109,24 @@ final class TeleprompterService: ObservableObject {
                 self?.consume(info)
             }
 
+        consume(nowPlaying.info)
+    }
+
+    func setPresentationVisible(_ visible: Bool, id: UUID) {
+        if visible { visiblePresentations.insert(id) } else { visiblePresentations.remove(id) }
+        if cancellable != nil && !visiblePresentations.isEmpty { consume(nowPlaying.info) }
+        reconcileTimer()
+    }
+
+    private func reconcileTimer() {
+        let needed = cancellable != nil && !visiblePresentations.isEmpty && currentInfo.isPlaying
+        if !needed { timer?.invalidate(); timer = nil; return }
+        guard timer == nil else { return }
         let updateTimer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateCurrentLine()
-            }
+            Task { @MainActor [weak self] in self?.updateCurrentLine() }
         }
         RunLoop.main.add(updateTimer, forMode: .common)
         timer = updateTimer
-        consume(nowPlaying.info)
     }
 
     func stop() {
@@ -143,7 +161,8 @@ final class TeleprompterService: ObservableObject {
 
     private func consume(_ info: NowPlayingInfo) {
         currentInfo = info
-        infoReceivedAt = Date()
+        reconcileTimer()
+        guard !visiblePresentations.isEmpty else { return }
         directSubtitle = info.subtitleText
         let key = trackKey(for: info)
 
@@ -189,14 +208,17 @@ final class TeleprompterService: ObservableObject {
         fetchSynchronizedLyrics(info: info, key: key)
     }
 
-    private func fetchSynchronizedLyrics(info: NowPlayingInfo, key: String) {
+    /// Searches LRCLIB by title and artist, then once more as free text (which
+    /// finds titles whose punctuation differs), and keeps only a record that is
+    /// really this song: matching title and artist, and for timed lyrics, length.
+    private func fetchSynchronizedLyrics(info: NowPlayingInfo, key: String, freeText: Bool = false) {
         let searchTitle = Self.cleanedTrackTitle(info.title)
         let searchArtist = Self.cleanedArtist(info.artist)
         var components = URLComponents(string: "https://lrclib.net/api/search")
-        components?.queryItems = [
-            URLQueryItem(name: "track_name", value: searchTitle),
-            URLQueryItem(name: "artist_name", value: searchArtist),
-        ]
+        components?.queryItems = freeText
+            ? [URLQueryItem(name: "q", value: "\(Self.primaryArtist(info.artist)) \(searchTitle)")]
+            : [URLQueryItem(name: "track_name", value: searchTitle),
+               URLQueryItem(name: "artist_name", value: searchArtist)]
         guard let url = components?.url else {
             fetchPlainLyrics(info: info, key: key)
             return
@@ -222,12 +244,17 @@ final class TeleprompterService: ObservableObject {
             let parsed = best.map {
                 Self.lines(from: $0, fallbackDuration: info.duration)
             } ?? []
+            let timed = best?.syncedLyrics?.isEmpty == false
+            let instrumental = best?.instrumental == true
             Task { @MainActor [weak self] in
                 guard let self, self.loadedKey == key else { return }
-                if error == nil,
-                   statusCode.map({ (200..<300).contains($0) }) != false,
-                   !parsed.isEmpty {
-                    self.applyLyrics(parsed, key: key)
+                let reachable = error == nil && statusCode.map({ (200..<300).contains($0) }) != false
+                if reachable, instrumental {
+                    self.finishUnavailable(key: key, message: "Instrumental")
+                } else if reachable, !parsed.isEmpty {
+                    self.applyLyrics(parsed, timed: timed, key: key)
+                } else if reachable, !freeText {
+                    self.fetchSynchronizedLyrics(info: info, key: key, freeText: true)
                 } else {
                     self.fetchPlainLyrics(info: info, key: key)
                 }
@@ -312,10 +339,11 @@ final class TeleprompterService: ObservableObject {
         dataTask?.resume()
     }
 
-    private func applyLyrics(_ parsed: [TimedLine], key: String) {
+    private func applyLyrics(_ parsed: [TimedLine], timed: Bool = false, key: String) {
         guard loadedKey == key else { return }
         isLoading = false
         lines = parsed
+        linesAreTimed = timed
         statusText = ""
         updateCurrentLine()
     }
@@ -386,11 +414,18 @@ final class TeleprompterService: ObservableObject {
             return
         }
 
-        let elapsed = currentInfo.elapsed
-            + (currentInfo.isPlaying ? Date().timeIntervalSince(infoReceivedAt) : 0)
-        let index = lines.lastIndex(where: { $0.start <= elapsed }) ?? 0
+        // The same position as the progress bar, a beat early: a line that appears
+        // as it's sung reads as late once the 0.2 s tick and the fade are added.
+        let elapsed = nowPlaying.estimatedElapsed(at: Date()) + Self.leadTime
+        guard let index = lines.lastIndex(where: { $0.start <= elapsed }) else {
+            // Before the first line: nothing shows during the intro when timings are real.
+            currentText = linesAreTimed ? Self.rest : lines[0].text
+            upcomingText = linesAreTimed ? lines[0].text : (lines.count > 1 ? lines[1].text : "")
+            return
+        }
         currentText = lines[index].text
-        upcomingText = index + 1 < lines.count ? lines[index + 1].text : ""
+        let next = lines[(index + 1)...].first { $0.text != Self.rest }
+        upcomingText = next?.text ?? ""
     }
 
     private func clear(status: String) {
@@ -402,6 +437,7 @@ final class TeleprompterService: ObservableObject {
         upcomingText = ""
         source = nil
         isLoading = false
+        linesAreTimed = false
         statusText = status
     }
 
@@ -431,21 +467,58 @@ final class TeleprompterService: ObservableObject {
         artist: String,
         duration: TimeInterval
     ) -> LyricsRecord? {
-        let normalizedTitle = normalized(title)
-        let normalizedArtist = normalized(artist)
-        return records.max { lhs, rhs in
-            score(
-                lhs,
-                title: normalizedTitle,
-                artist: normalizedArtist,
-                duration: duration
-            ) < score(
-                rhs,
-                title: normalizedTitle,
-                artist: normalizedArtist,
-                duration: duration
-            )
+        records
+            .compactMap { record in
+                score(record, title: title, artist: artist, duration: duration).map { (record, $0) }
+            }
+            .max { $0.1 < $1.1 }?.0
+    }
+
+    /// How well a record matches the playing track, or nil when it's a different
+    /// song (title or artist don't match) or has no lyrics at all.
+    nonisolated static func score(
+        title recordTitle: String, artist recordArtist: String, duration recordDuration: Double,
+        synced: Bool, hasLyrics: Bool,
+        title: String, artist: String, duration: TimeInterval
+    ) -> Double? {
+        guard hasLyrics else { return nil }
+        let wantedTitle = normalized(cleanedTrackTitle(title))
+        let foundTitle = normalized(cleanedTrackTitle(recordTitle))
+        var value = 0.0
+        if foundTitle == wantedTitle {
+            value += 6
+        } else if !wantedTitle.isEmpty, !foundTitle.isEmpty,
+                  foundTitle.hasPrefix(wantedTitle) || wantedTitle.hasPrefix(foundTitle) {
+            value += 3
+        } else {
+            return nil
         }
+
+        let wantedArtist = normalized(cleanedArtist(artist))
+        let wantedPrimary = normalized(primaryArtist(artist))
+        let foundArtist = normalized(recordArtist)
+        if foundArtist == wantedArtist {
+            value += 5
+        } else if !foundArtist.isEmpty, !wantedPrimary.isEmpty,
+                  foundArtist.contains(wantedPrimary) || wantedArtist.contains(foundArtist) {
+            value += 3
+        } else {
+            return nil
+        }
+
+        // Timed lyrics from another cut of the song (radio edit, live, extended
+        // intro) drift by the length difference, so length decides between them.
+        let gap = duration > 0 && recordDuration > 0 ? abs(recordDuration - duration) : nil
+        if let gap {
+            switch gap {
+            case ..<2.5: value += 4
+            case ..<6: value += 2
+            case ..<15: value += 0
+            default: value -= synced ? 8 : 2
+            }
+        }
+        if synced, gap.map({ $0 < 15 }) ?? true { value += 3 }
+        return value
     }
 
     nonisolated private static func score(
@@ -453,21 +526,15 @@ final class TeleprompterService: ObservableObject {
         title: String,
         artist: String,
         duration: TimeInterval
-    ) -> Double {
-        var value = 0.0
-        if normalized(record.trackName) == title { value += 4 }
-        if normalized(record.artistName).contains(artist)
-            || artist.contains(normalized(record.artistName)) {
-            value += 3
-        }
-        if record.syncedLyrics?.isEmpty == false { value += 3 }
-        if duration > 0 {
-            value += max(0, 2 - abs(record.duration - duration) / 8)
-        }
-        return value
+    ) -> Double? {
+        let synced = record.syncedLyrics?.isEmpty == false
+        let hasLyrics = synced || record.plainLyrics?.isEmpty == false || record.instrumental == true
+        return score(title: record.trackName, artist: record.artistName, duration: record.duration,
+                     synced: synced, hasLyrics: hasLyrics,
+                     title: title, artist: artist, duration: duration)
     }
 
-    nonisolated private static func normalized(_ string: String) -> String {
+    nonisolated static func normalized(_ string: String) -> String {
         string
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
@@ -475,7 +542,7 @@ final class TeleprompterService: ObservableObject {
             .joined(separator: " ")
     }
 
-    nonisolated private static func cleanedTrackTitle(_ title: String) -> String {
+    nonisolated static func cleanedTrackTitle(_ title: String) -> String {
         var result = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let patterns = [
             #"\s*[\(\[]\s*(?:feat\.?|featuring|with)\b.*?[\)\]]\s*"#,
@@ -493,7 +560,7 @@ final class TeleprompterService: ObservableObject {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    nonisolated private static func cleanedArtist(_ artist: String) -> String {
+    nonisolated static func cleanedArtist(_ artist: String) -> String {
         var result = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern = #"\s+(?:feat\.?|featuring)\s+.+$"#
         result = result.replacingOccurrences(
@@ -504,7 +571,7 @@ final class TeleprompterService: ObservableObject {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    nonisolated private static func primaryArtist(_ artist: String) -> String {
+    nonisolated static func primaryArtist(_ artist: String) -> String {
         let cleaned = cleanedArtist(artist)
         let separators = [",", ";", " x ", " X "]
         for separator in separators {
@@ -553,44 +620,48 @@ final class TeleprompterService: ObservableObject {
         return components.url
     }
 
+    /// Timed lines from LRC text. Blank timestamps mark instrumental breaks and
+    /// become one empty line per break; an `[offset:]` tag shifts every line.
+    nonisolated static func parseLRC(_ synced: String) -> [(start: TimeInterval, text: String)] {
+        let stamp = try? NSRegularExpression(pattern: #"\[(\d+):(\d+(?:\.\d+)?)\]"#)
+        let offsetTag = try? NSRegularExpression(pattern: #"^\s*\[offset:\s*([+-]?\d+)\s*\]"#, options: .caseInsensitive)
+        var offset: TimeInterval = 0
+        var parsed: [(start: TimeInterval, text: String)] = []
+        for rawLine in synced.components(separatedBy: .newlines) {
+            let line = rawLine as NSString
+            let range = NSRange(location: 0, length: line.length)
+            if let match = offsetTag?.firstMatch(in: rawLine, range: range),
+               let milliseconds = Double(line.substring(with: match.range(at: 1))) {
+                // A positive offset shows lyrics sooner.
+                offset = milliseconds / 1000
+                continue
+            }
+            let matches = stamp?.matches(in: rawLine, range: range) ?? []
+            guard let last = matches.last else { continue }
+            let text = line.substring(from: last.range.location + last.range.length)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            for match in matches where match.numberOfRanges >= 3 {
+                guard let minutes = Double(line.substring(with: match.range(at: 1))),
+                      let seconds = Double(line.substring(with: match.range(at: 2))) else { continue }
+                parsed.append((minutes * 60 + seconds, text.isEmpty ? rest : text))
+            }
+        }
+        parsed.sort { $0.start < $1.start }
+        var result: [(start: TimeInterval, text: String)] = []
+        for entry in parsed {
+            // One rest per break, and none before the first sung line (the intro rests anyway).
+            if entry.text == rest, result.isEmpty || result.last?.text == rest { continue }
+            result.append((max(0, entry.start - offset), entry.text))
+        }
+        return result
+    }
+
     nonisolated private static func lines(
         from record: LyricsRecord,
         fallbackDuration: TimeInterval
     ) -> [TimedLine] {
         if let synced = record.syncedLyrics, !synced.isEmpty {
-            let expression = try? NSRegularExpression(
-                pattern: #"\[(\d+):(\d+(?:\.\d+)?)\]"#
-            )
-            var parsed: [TimedLine] = []
-            for rawLine in synced.components(separatedBy: .newlines) {
-                let range = NSRange(rawLine.startIndex..., in: rawLine)
-                let matches = expression?.matches(in: rawLine, range: range) ?? []
-                guard let last = matches.last else {
-                    continue
-                }
-                let textStart = last.range.location + last.range.length
-                let text = (rawLine as NSString)
-                    .substring(from: textStart)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { continue }
-                for match in matches {
-                    guard match.numberOfRanges >= 3,
-                          let minuteRange = Range(match.range(at: 1), in: rawLine),
-                          let secondRange = Range(match.range(at: 2), in: rawLine),
-                          let minutes = Double(rawLine[minuteRange]),
-                          let seconds = Double(rawLine[secondRange]) else {
-                        continue
-                    }
-                    parsed.append(
-                        TimedLine(
-                            start: minutes * 60 + seconds,
-                            end: nil,
-                            text: text
-                        )
-                    )
-                }
-            }
-            return parsed.sorted { $0.start < $1.start }
+            return parseLRC(synced).map { TimedLine(start: $0.start, end: nil, text: $0.text) }
         }
 
         let plain = record.plainLyrics?

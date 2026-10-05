@@ -1,13 +1,17 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.56
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.56** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.56:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Switch from Maccy in one click.** Settings → Clipboard imports Maccy's history, pins and copy counts included.
+- **Searchable screenshots.** Text inside image clips is recognised on your Mac, so you can search for it and copy it.
+- **Filters in search.** `@image`, `@link`, `@file`, `@color`, `@pinned`, `@snippet`, `@` an app's name, or `#` a collection.
+- **Snippets and collections.** Write text you paste often, and file clips into collections. Pins and snippets are kept after quitting.
+- **Copy as** UPPERCASE, lowercase, Title Case or plain text, from any clip's menu.
+- **Keys for pins** (⌃A, ⌃B…), **drag clips** into other apps, and **pick a colour** from anywhere on screen.
+- **Clips can tidy themselves up** after 1, 7 or 30 days without use; pins and snippets stay.
+- **Timers are back in their original style,** up to three side by side, each with its own name.
+- **Connect headphones from the Music page.** AirPods and headphones you've paired before appear in the output menu.
+- **Under 1 MB.** A new File Converter tool shrinks an image to under a megabyte, for GitHub or email. PDF to text is gone.

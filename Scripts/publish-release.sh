@@ -2,6 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./Scripts/check-release-policy.sh
+python3 - <<'CHECK_DEVELOPMENT'
+import plistlib
+from pathlib import Path
+info = plistlib.loads(Path('Sources/Resources/Info.plist').read_bytes())
+assert not info.get('MacSpacesDevelopmentBuild', False), 'Development builds cannot be published as stable releases.'
+CHECK_DEVELOPMENT
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit the final snapshot before publishing.' >&2; exit 1; }
 repo=zlichtman/MacSpaces
 commit=$(git rev-parse HEAD)
@@ -25,7 +31,9 @@ assert tagged == commit, f'Push {tag} at the current main commit before publishi
 releases = [release for release in json.loads((root/'releases.json').read_text()) if not release['draft']]
 builds = []
 for release in releases:
-    markers = re.findall(r'^<!-- macspaces-build:([0-9]+) -->$', release.get('body') or '', re.M)
+    # Notes edited on github.com come back with CRLF line endings.
+    body = (release.get('body') or '').replace('\r\n', '\n')
+    markers = re.findall(r'^<!-- macspaces-build:([0-9]+) -->$', body, re.M)
     assert len(markers) == 1, f"Release {release['tag_name']} needs exactly one build marker"
     builds.append(int(markers[0]))
 assert not builds or build > max(builds), 'Increment the internal build above every published release'

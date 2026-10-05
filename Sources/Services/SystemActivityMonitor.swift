@@ -5,9 +5,6 @@ import ObjectiveC.runtime
 
 struct SystemLiveActivity: Equatable {
     enum Kind: Equatable {
-        case volume
-        case displayBrightness
-        case keyboardBrightness
         case microphone
         case focus
     }
@@ -32,76 +29,29 @@ struct SystemLiveActivity: Equatable {
     }
 }
 
-/// Observes the Mac controls people change from the keyboard and Control
-/// Center, then publishes a short-lived snapshot for the closed Nook.
+/// Observes microphone mute and Focus, which macOS doesn't show on screen when
+/// they change, and publishes a short-lived activity for the closed Nook.
+/// Volume and brightness are left to macOS's own indicators.
 ///
-/// Audio uses public CoreAudio APIs. Display/keyboard brightness and Focus are
-/// loaded dynamically from system frameworks so unsupported OS releases and
-/// hardware simply omit those activities instead of failing the app.
+/// The microphone uses public CoreAudio APIs. Focus is loaded dynamically, so
+/// unsupported releases simply omit it instead of failing the app.
 @MainActor
 final class SystemActivityMonitor: ObservableObject {
     @Published private(set) var currentActivity: SystemLiveActivity?
 
     private struct Snapshot: Equatable {
-        var volume: Int?
-        var outputMuted: Bool?
-        var displayBrightness: Int?
-        var keyboardBrightness: Int?
         var microphoneMuted: Bool?
         var focusName: String?
     }
 
-    private typealias DisplayBrightnessFunction =
-        @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
-    private typealias KeyboardBrightnessFunction =
-        @convention(c) (AnyObject, Selector, UInt64) -> Float
-
     private var timer: Timer?
     private var previousSnapshot: Snapshot?
     private var hideWorkItem: DispatchWorkItem?
-    private let getDisplayBrightness: DisplayBrightnessFunction?
-    private let keyboardClient: AnyObject?
-    private let getKeyboardBrightness: KeyboardBrightnessFunction?
-    private let keyboardBrightnessSelector = NSSelectorFromString("brightnessForKeyboard:")
     private let focusManager: AnyObject?
 
     var justChangedRecently: Bool { currentActivity != nil }
 
     init() {
-        if let handle = dlopen(
-            "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices",
-            RTLD_NOW
-        ), let symbol = dlsym(handle, "DisplayServicesGetBrightness") {
-            getDisplayBrightness = unsafeBitCast(symbol, to: DisplayBrightnessFunction.self)
-        } else {
-            getDisplayBrightness = nil
-        }
-
-        _ = dlopen(
-            "/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness",
-            RTLD_NOW
-        )
-        if let keyboardClass: AnyClass = NSClassFromString("KeyboardBrightnessClient"),
-           let unmanagedClient = (keyboardClass as AnyObject)
-            .perform(NSSelectorFromString("new")) {
-            let client = unmanagedClient.takeRetainedValue() as AnyObject
-            keyboardClient = client
-            if let implementation = class_getMethodImplementation(
-                keyboardClass,
-                keyboardBrightnessSelector
-            ) {
-                getKeyboardBrightness = unsafeBitCast(
-                    implementation,
-                    to: KeyboardBrightnessFunction.self
-                )
-            } else {
-                getKeyboardBrightness = nil
-            }
-        } else {
-            keyboardClient = nil
-            getKeyboardBrightness = nil
-        }
-
         _ = dlopen(
             "/System/Library/PrivateFrameworks/Focus.framework/Focus",
             RTLD_NOW
@@ -119,7 +69,7 @@ final class SystemActivityMonitor: ObservableObject {
         guard timer == nil else { return }
         previousSnapshot = readSnapshot()
         // Fast enough to feel attached to a hardware key press while avoiding
-        // continuous CoreAudio/CoreBrightness churn in an idle menu-bar app.
+        // continuous CoreAudio churn in an idle menu-bar app.
         let pollingTimer = Timer(timeInterval: 0.45, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refresh()
@@ -163,50 +113,6 @@ final class SystemActivityMonitor: ObservableObject {
             return
         }
 
-        if settings.showVolumeLiveActivity,
-           let volume = next.volume,
-           volume != previousSnapshot.volume
-                || next.outputMuted != previousSnapshot.outputMuted {
-            let muted = next.outputMuted == true
-            show(
-                SystemLiveActivity(
-                    kind: .volume,
-                    label: muted ? "Muted" : "\(volume)%",
-                    systemImage: muted ? "speaker.slash.fill" : volumeSymbol(for: volume),
-                    level: muted ? 0 : Double(volume) / 100
-                )
-            )
-            return
-        }
-
-        if settings.showBrightnessLiveActivity,
-           let brightness = next.displayBrightness,
-           brightness != previousSnapshot.displayBrightness {
-            show(
-                SystemLiveActivity(
-                    kind: .displayBrightness,
-                    label: "\(brightness)%",
-                    systemImage: "sun.max.fill",
-                    level: Double(brightness) / 100
-                )
-            )
-            return
-        }
-
-        if settings.showKeyboardBrightnessLiveActivity,
-           let brightness = next.keyboardBrightness,
-           brightness != previousSnapshot.keyboardBrightness {
-            show(
-                SystemLiveActivity(
-                    kind: .keyboardBrightness,
-                    label: "\(brightness)%",
-                    systemImage: "keyboard.fill",
-                    level: Double(brightness) / 100
-                )
-            )
-            return
-        }
-
         if settings.showFocusLiveActivity,
            next.focusName != previousSnapshot.focusName {
             let name = next.focusName
@@ -231,11 +137,7 @@ final class SystemActivityMonitor: ObservableObject {
     }
 
     private func readSnapshot() -> Snapshot {
-        let output = defaultAudioDevice(selector: kAudioHardwarePropertyDefaultOutputDevice)
         let input = defaultAudioDevice(selector: kAudioHardwarePropertyDefaultInputDevice)
-        let outputScalar = output.flatMap {
-            audioScalar(device: $0, scope: kAudioDevicePropertyScopeOutput)
-        }
         let inputScalar = input.flatMap {
             audioScalar(device: $0, scope: kAudioDevicePropertyScopeInput)
         }
@@ -244,12 +146,6 @@ final class SystemActivityMonitor: ObservableObject {
         }
 
         return Snapshot(
-            volume: outputScalar.map { Int(($0 * 100).rounded()) },
-            outputMuted: output.flatMap {
-                audioMute(device: $0, scope: kAudioDevicePropertyScopeOutput)
-            },
-            displayBrightness: displayBrightness(),
-            keyboardBrightness: keyboardBrightness(),
             microphoneMuted: explicitInputMute ?? inputScalar.map { $0 <= 0.001 },
             focusName: activeFocusName()
         )
@@ -335,50 +231,6 @@ final class SystemActivityMonitor: ObservableObject {
         return value != 0
     }
 
-    private func displayBrightness() -> Int? {
-        guard let getDisplayBrightness else { return nil }
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else {
-            return nil
-        }
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetActiveDisplayList(count, &displays, &count) == .success else {
-            return nil
-        }
-
-        for display in displays.sorted(by: { CGDisplayIsBuiltin($0) > CGDisplayIsBuiltin($1) }) {
-            var value: Float = 0
-            guard getDisplayBrightness(display, &value) == 0,
-                  value.isFinite,
-                  (0...1).contains(value) else {
-                continue
-            }
-            return Int((value * 100).rounded())
-        }
-        return nil
-    }
-
-    private func keyboardBrightness() -> Int? {
-        guard let keyboardClient,
-              let getKeyboardBrightness,
-              let unmanagedIdentifiers = keyboardClient
-                .perform(NSSelectorFromString("copyKeyboardBacklightIDs")) else {
-            return nil
-        }
-        let rawIdentifiers = unmanagedIdentifiers.takeRetainedValue()
-        guard let identifiers = rawIdentifiers as? [NSNumber],
-              let identifier = identifiers.first else {
-            return nil
-        }
-        let value = getKeyboardBrightness(
-            keyboardClient,
-            keyboardBrightnessSelector,
-            identifier.uint64Value
-        )
-        guard value.isFinite, (0...1).contains(value) else { return nil }
-        return Int((value * 100).rounded())
-    }
-
     private func activeFocusName() -> String? {
         guard let activity = focusManager?
             .perform(NSSelectorFromString("activeActivity"))?
@@ -389,15 +241,6 @@ final class SystemActivityMonitor: ObservableObject {
             .perform(NSSelectorFromString("activityDisplayName"))?
             .takeUnretainedValue() as? String
         return name?.isEmpty == false ? name : "Focus"
-    }
-
-    private func volumeSymbol(for volume: Int) -> String {
-        switch volume {
-        case ...0: return "speaker.fill"
-        case 1...33: return "speaker.wave.1.fill"
-        case 34...66: return "speaker.wave.2.fill"
-        default: return "speaker.wave.3.fill"
-        }
     }
 
     deinit {

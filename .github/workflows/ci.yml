@@ -5,10 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Checks and the Release build run as parallel jobs; the commit passes when both do.
 jobs:
-  build:
-    name: Build MacSpaces
-    runs-on: macos-14
+  checks:
+    name: Regression checks
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,11 +21,43 @@ jobs:
       - name: Check updater revisions
         run: ./Scripts/check-update-revisions.sh
 
+      - name: Check core lifecycle and action routing
+        run: ./Scripts/check-core.sh
+
       - name: Check appearance migration and contrast
         run: ./Scripts/check-appearance.sh
 
+      - name: Check playback capability and routing safety
+        run: ./Scripts/check-playback.sh
+
+      - name: Check agent hook installation
+        run: ./Scripts/check-agent-hooks.sh
+      - name: Notes migration and conflicts
+        run: Scripts/check-notes.sh
+
+      - name: Rich clipboard and privacy
+        run: Scripts/check-clipboard.sh
+
+      - name: Calculator arithmetic and conversions
+        run: Scripts/check-calculator.sh
+
+      - name: Teleprompter voice following
+        run: Scripts/check-prompter.sh
+
+      - name: Messages recipient and draft safety
+        run: Scripts/check-messages.sh
+
+      - name: Read-only incoming Messages fixtures
+        run: bash Scripts/check-incoming-messages.sh
+
       - name: Check desktop window behavior
         run: ./Scripts/check-window.sh
+
+  build:
+    name: Build MacSpaces
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -39,6 +72,7 @@ jobs:
           -scheme MacSpaces
           -configuration Release
           -derivedDataPath build
+          -skipPackagePluginValidation
           CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
           build
 
