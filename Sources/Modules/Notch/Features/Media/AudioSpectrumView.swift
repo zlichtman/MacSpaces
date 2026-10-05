@@ -8,10 +8,12 @@ struct AudioSpectrumView: View {
     var isPlaying: Bool
 
     @ObservedObject private var theme = ThemeStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         SpectrumBarsView(
             isPlaying: isPlaying,
+            animates: !reduceMotion,
             primaryColor: NSColor(theme.notch.accent),
             secondaryColor: NSColor(theme.notch.secondaryAccent)
         )
@@ -23,6 +25,7 @@ struct AudioSpectrumView: View {
 
 private struct SpectrumBarsView: NSViewRepresentable {
     let isPlaying: Bool
+    let animates: Bool
     let primaryColor: NSColor
     let secondaryColor: NSColor
 
@@ -33,6 +36,7 @@ private struct SpectrumBarsView: NSViewRepresentable {
     func updateNSView(_ view: SpectrumBarsNSView, context: Context) {
         view.update(
             isPlaying: isPlaying,
+            animates: animates,
             primaryColor: primaryColor,
             secondaryColor: secondaryColor
         )
@@ -42,13 +46,19 @@ private struct SpectrumBarsView: NSViewRepresentable {
 private final class SpectrumBarsNSView: NSView {
     private let bars = (0..<7).map { _ in CAGradientLayer() }
     private let baseScales: [CGFloat] = [0.38, 0.68, 0.50, 0.96, 0.60, 0.80, 0.42]
-    private var lastIsPlaying: Bool?
+    private var lastState: (playing: Bool, animates: Bool)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer = CALayer()
         layer?.masksToBounds = false
+
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resumeIfNeeded() }
+            }
+        }
 
         bars.forEach {
             $0.startPoint = CGPoint(x: 0.5, y: 1)
@@ -61,6 +71,17 @@ private final class SpectrumBarsNSView: NSView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        resumeIfNeeded()
+    }
+
+    private func resumeIfNeeded() {
+        guard let lastState, lastState.playing, lastState.animates, window != nil,
+              bars.first?.animation(forKey: "spectrum") == nil else { return }
+        startAnimations()
     }
 
     override func layout() {
@@ -85,7 +106,7 @@ private final class SpectrumBarsNSView: NSView {
         CATransaction.commit()
     }
 
-    func update(isPlaying: Bool, primaryColor: NSColor, secondaryColor: NSColor) {
+    func update(isPlaying: Bool, animates: Bool, primaryColor: NSColor, secondaryColor: NSColor) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         bars.forEach {
@@ -94,9 +115,13 @@ private final class SpectrumBarsNSView: NSView {
         }
         CATransaction.commit()
 
-        guard lastIsPlaying != isPlaying else { return }
-        lastIsPlaying = isPlaying
-        isPlaying ? startAnimations() : stopAnimations()
+        // Core Animation drops animations after sleep, a display change or the panel
+        // leaving the screen; restart them whenever they should be running but aren't.
+        let stalled = isPlaying && animates && bars.first?.animation(forKey: "spectrum") == nil
+        guard stalled || lastState?.playing != isPlaying || lastState?.animates != animates else { return }
+        lastState = (isPlaying, animates)
+        // Reduce Motion keeps the bars still at their resting heights.
+        isPlaying && animates ? startAnimations() : stopAnimations()
     }
 
     private func startAnimations() {

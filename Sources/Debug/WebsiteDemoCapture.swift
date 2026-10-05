@@ -13,6 +13,26 @@ enum WebsiteDemoCapture {
         try! FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         InteractionRegressionChecks.run()
         DeviceRegressionChecks.run()
+        if env["MACSPACES_DEMO_KIND"] == "notch" {
+            WebsiteDemoNotch.run(output: output)
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return true
+        }
+        if env["MACSPACES_DEMO_KIND"] == "clips" {
+            WebsiteDemoClips.run(output: output)
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return true
+        }
+        if env["MACSPACES_DEMO_KIND"] == "home" {
+            WebsiteDemo234.runHome(output: output)
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return true
+        }
+        if env["MACSPACES_DEMO_KIND"] == "2.x" {
+            WebsiteDemo234.run(output: output)
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return true
+        }
         let settings = NookSettings.shared
         let services = AppServices.shared
         let theme = ThemeStore.shared
@@ -27,7 +47,6 @@ enum WebsiteDemoCapture {
             }
             return true
         }
-        settings.showTeleprompterBar = false
         settings.showMusicLiveActivity = true
         settings.showTimerLiveActivity = false
         settings.showPowerLiveActivity = false

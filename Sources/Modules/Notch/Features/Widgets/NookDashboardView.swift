@@ -9,11 +9,12 @@ struct NookDashboardView: View {
     @ObservedObject private var theme = ThemeStore.shared
     @State private var visualOrder: [NookWidgetKind]
     @State private var draggedKind: NookWidgetKind?
+    @State private var keyMonitor: Any?
 
     init(viewModel: NotchViewModel) {
         self.viewModel = viewModel
         self.settings = viewModel.settings
-        _visualOrder = State(initialValue: viewModel.settings.widgets)
+        _visualOrder = State(initialValue: viewModel.settings.widgets.filter { !$0.isQuickBar })
     }
 
     var body: some View {
@@ -31,16 +32,18 @@ struct NookDashboardView: View {
             } else {
                 compatibleWidgetScroll {
                     let fullHeight = max(138, proxy.size.height)
-                    let widths = visualOrder.fittedNookWidths(availableWidth: proxy.size.width)
-                    let compactKinds = compactWidgetKinds
+                    let sizes = settings.widgetSizes
+                    let widths = visualOrder.fittedNookWidths(availableWidth: proxy.size.width, sizes: sizes)
+                    let compactKinds = compactWidgetKinds(sizes)
                     NookTilesLayout(spacing: 10) {
-                        ForEach(visualOrder) { kind in
+                        ForEach(Array(visualOrder.enumerated()), id: \.element) { index, kind in
                             let compact = compactKinds.contains(kind)
                             dashboardTile(
                                 kind: kind,
-                                width: widths[kind] ?? kind.preferredWidth,
+                                width: widths[kind] ?? kind.width(for: settings.size(for: kind)),
                                 height: compact ? (fullHeight - 10) / 2 : fullHeight,
-                                compact: compact
+                                compact: compact,
+                                entranceIndex: index
                             )
                             .layoutValue(
                                 key: NookCompactRowLayoutValueKey.self,
@@ -56,13 +59,71 @@ struct NookDashboardView: View {
                 }
             }
         }
+        .coordinateSpace(name: NookDashboardTile.space)
         .onChange(of: settings.widgets) { widgets in
-            guard draggedKind == nil, visualOrder != widgets else { return }
-            visualOrder = widgets
+            let tiles = widgets.filter { !$0.isQuickBar }
+            guard draggedKind == nil, visualOrder != tiles else { return }
+            visualOrder = tiles
         }
+        // Clicking empty space between or around tiles clears the selection.
+        .background {
+            Color.clear.contentShape(Rectangle())
+                .onTapGesture { viewModel.selectedWidget = nil }
+        }
+        .overlay(alignment: .bottom) {
+            if let removed = viewModel.recentlyRemoved {
+                HStack(spacing: 10) {
+                    Text("Removed \(removed.kind.title)").font(.system(size: 11, weight: .medium))
+                    Button("Undo") { viewModel.undoRemoveWidget() }
+                        .buttonStyle(.borderless).font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(theme.notch.accent)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(theme.notch.control, in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.nookForeground.opacity(0.12), lineWidth: 0.75))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                .padding(.bottom, 4)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(Design.spring(), value: viewModel.recentlyRemoved?.kind)
+        .onAppear(perform: installKeyMonitor)
         .onDisappear {
             if draggedKind != nil {
                 WidgetDragSession.shared.finish()
+            }
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+        }
+    }
+
+    /// Delete or Forward Delete removes the selected widget, ⌘Z undoes, Escape deselects.
+    /// Ignored while a text field has focus, so typing in a widget still edits text, and for
+    /// other displays' Nooks, whose own dashboards handle their keys.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        let model = viewModel
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard (event.window as? NotchWindow)?.owner === model,
+                  model.state == .expanded, model.selectedTab == .nook,
+                  !(event.window?.firstResponder is NSTextInputClient) else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            switch event.keyCode {
+            case 51, 117:
+                // Plain Delete only: ⌘⌫ and ⌥⌫ keep their usual meaning. Forward Delete carries .function.
+                guard flags.subtracting(.function).isEmpty, model.selectedWidget != nil else { return event }
+                model.removeSelectedWidget()
+                return nil
+            case 6 where flags == .command:
+                guard model.recentlyRemoved != nil else { return event }
+                model.undoRemoveWidget()
+                return nil
+            case 53:
+                guard model.selectedWidget != nil else { return event }
+                model.selectedWidget = nil
+                return nil
+            default:
+                return event
             }
         }
     }
@@ -79,10 +140,10 @@ struct NookDashboardView: View {
         }
     }
 
-    private var compactWidgetKinds: Set<NookWidgetKind> {
+    private func compactWidgetKinds(_ sizes: [NookWidgetKind: NookWidgetSize]) -> Set<NookWidgetKind> {
         Set(
             visualOrder
-                .nookLayoutItems()
+                .nookLayoutItems(sizes: sizes)
                 .filter(\.isStack)
                 .flatMap(\.kinds)
         )
@@ -92,7 +153,8 @@ struct NookDashboardView: View {
         kind: NookWidgetKind,
         width: CGFloat,
         height: CGFloat,
-        compact: Bool
+        compact: Bool,
+        entranceIndex: Int
     ) -> some View {
         NookDashboardTile(
             kind: kind,
@@ -100,8 +162,12 @@ struct NookDashboardView: View {
             height: height,
             compact: compact,
             viewModel: viewModel,
-            isReordering: draggedKind == kind
+            isReordering: draggedKind == kind,
+            isSelected: viewModel.selectedWidget == kind
         )
+        .modifier(NookTileEntrance(index: entranceIndex))
+        // A click anywhere on a tile selects it; its own buttons keep working.
+        .simultaneousGesture(TapGesture().onEnded { viewModel.selectedWidget = kind })
         .onDrag {
             draggedKind = kind
             settings.beginInteractiveReorder()
@@ -121,7 +187,7 @@ struct NookDashboardView: View {
                 target: kind,
                 order: $visualOrder,
                 draggedKind: $draggedKind,
-                onOrderChanged: settings.setWidgetOrder,
+                onOrderChanged: { settings.setWidgetOrder($0 + settings.widgets.filter(\.isQuickBar)) },
                 onFinish: WidgetDragSession.shared.finish
             )
         )
@@ -243,26 +309,15 @@ private struct NookDashboardTile: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var theme = ThemeStore.shared
     let isReordering: Bool
+    var isSelected = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
-                Image(systemName: kind.systemImage)
-                    .foregroundStyle(theme.notch.accent)
-                if width >= 150 {
-                    Text(kind.title.uppercased())
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        // No header: what each widget shows says what it is (a clock, a timer,
+        // the cover art). VoiceOver still names the tile.
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, compact ? 4 : 6)
+            .padding(.bottom, compact ? 2 : 4)
         .frame(width: width, height: height)
         .background {
             PremiumWidgetChrome(
@@ -279,17 +334,71 @@ private struct NookDashboardTile: View {
         .opacity(isReordering ? 0.96 : 1)
         .animation(Design.spring(), value: isReordering)
         .zIndex(isReordering ? 10 : 0)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(kind.title)
         .overlay {
             WidgetContextMenuOverlay(items: contextMenuItems)
         }
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: nookRadius, style: .continuous)
+                    .strokeBorder(theme.notch.accent, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        // The tile is the small form of its page: open it from the corner, or double-click.
+        .overlay(alignment: .topTrailing) {
+            if let page = kind.page, hovering, !isReordering {
+                Button { openPage() } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().fill(theme.notch.control.opacity(0.5)))
+                        .foregroundStyle(theme.nookForeground)
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .help("Open \(page.title)")
+                .accessibilityLabel("Open \(page.title)")
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear.onAppear { frame = proxy.frame(in: .named(NookDashboardTile.space)) }
+                    .onChange(of: proxy.frame(in: .named(NookDashboardTile.space))) { _, value in frame = value }
+            }
+        }
+        .onHover { value in withAnimation(.easeOut(duration: 0.15)) { hovering = value } }
+        .simultaneousGesture(TapGesture(count: 2).onEnded { openPage() })
+        .animation(Design.spring(), value: isSelected)
+    }
+
+    static let space = "nookDashboard"
+    @State private var hovering = false
+    @State private var frame: CGRect = .zero
+
+    private func openPage() {
+        // The page area is the panel less its insets (20 at the sides, camera clearance on top, 12 below).
+        let panel = viewModel.expandedPanelSize
+        let size = CGSize(width: panel.width - 40, height: panel.height - viewModel.expandedHeaderTopInset - 12)
+        let anchor = size.width > 0 && size.height > 0
+            ? UnitPoint(x: min(1, max(0, frame.midX / size.width)), y: min(1, max(0, frame.midY / size.height)))
+            : .center
+        viewModel.openPage(for: kind, from: anchor)
     }
 
     private var contextMenuItems: [WidgetContextMenuItem] {
-        var items = [
+        var items: [WidgetContextMenuItem] = kind.page.map { page in
+            [WidgetContextMenuItem(title: "Open \(page.title)", systemImage: "arrow.up.left.and.arrow.down.right",
+                                   action: { openPage() }), .separator]
+        } ?? []
+        items += [
             WidgetContextMenuItem(
                 title: "Add Widget",
                 systemImage: "plus",
-                children: NookWidgetKind.allCases.map { candidate in
+                children: NookWidgetKind.alphabetical.map { candidate in
                     WidgetContextMenuItem(
                         title: candidate.title,
                         systemImage: candidate.systemImage,
@@ -297,6 +406,17 @@ private struct NookDashboardTile: View {
                         action: {
                             viewModel.settings.setEnabled(true, for: candidate)
                         }
+                    )
+                }
+            ),
+            WidgetContextMenuItem(
+                title: "Size",
+                systemImage: "square.resize",
+                children: kind.supportedSizes.map { size in
+                    WidgetContextMenuItem(
+                        title: size.title + (viewModel.settings.size(for: kind) == size ? " ✓" : ""),
+                        systemImage: size.symbol,
+                        action: { withAnimation(Design.spring()) { viewModel.settings.setSize(size, for: kind) } }
                     )
                 }
             ),
@@ -363,22 +483,25 @@ private struct NookDashboardTile: View {
     private var content: some View {
         switch kind {
         case .media:
-            MediaPlayerView(nowPlaying: viewModel.nowPlaying, style: visualStyle)
-                .padding(.horizontal, 5)
+            if compact {
+                CompactMediaView(nowPlaying: viewModel.nowPlaying)
+            } else {
+                MediaPlayerView(nowPlaying: viewModel.nowPlaying, style: visualStyle)
+                    .padding(.horizontal, 5)
+                    // The cover tints the whole tile, as on the Music page.
+                    .background { ArtworkAmbienceFollowing(nowPlaying: viewModel.nowPlaying).padding(-40) }
+            }
         case .shortcuts:
             ShortcutsWidget(service: AppServices.shared.shortcuts, compact: true)
         case .calendar:
-            CalendarWidget(service: AppServices.shared.calendar)
+            CalendarWidget(service: AppServices.shared.calendar, compact: compact,
+                           large: viewModel.settings.size(for: .calendar) == .large)
         case .todos:
-            RemindersWidget(service: AppServices.shared.calendar)
+            RemindersWidget(service: AppServices.shared.calendar, compact: compact)
         case .timer:
-            NookTimerWidget(
-                service: viewModel.timerService,
-                style: visualStyle,
-                compact: compact
-            )
+            NookTimerWidget(service: viewModel.timerService, compact: compact)
         case .notes:
-            NotesWidget()
+            NotesWidget(compact: compact)
         case .mirror:
             MirrorView()
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -387,22 +510,32 @@ private struct NookDashboardTile: View {
             NookBatteryWidget(monitor: viewModel.powerMonitor, bluetooth: viewModel.bluetoothMonitor, compact: compact,
                               onDetailsChanged: { viewModel.isDeviceDetailsPresented = $0 })
         case .clock:
-            NookClockWidget(style: visualStyle, compact: compact)
+            NookClockWidget(compact: compact)
         case .weather:
-            WeatherWidget(service: AppServices.shared.weather, compact: compact, surface: .notch,
+            WeatherWidget(service: AppServices.shared.weather, compact: compact,
+                          showsForecast: width >= 260, surface: .notch,
                           onDetailsChanged: { viewModel.isWeatherDetailsPresented = $0 })
         case .clipboard:
-            ClipboardWidget(monitor: AppServices.shared.clipboard)
+            ClipboardWidget(monitor: AppServices.shared.clipboard, compact: compact)
         case .pomodoro:
             PomodoroWidget(compact: compact)
         case .quickActions:
-            QuickActionsWidget()
-        case .audioControls:
-            AudioControlsWidget(service: AppServices.shared.audioMixer)
+            QuickActionsWidget(columns: width >= 220 ? 3 : 2)
         case .systemStats:
-            SystemStatsWidget(service: AppServices.shared.systemStats)
+            SystemStatsWidget(service: AppServices.shared.systemStats, compact: compact)
+        case .notifications:
+            MessagesWidget()
         case .keepAwake:
-            KeepAwakeWidget(service: AppServices.shared.keepAwake)
+            KeepAwakeWidget(service: AppServices.shared.keepAwake, compact: compact)
+        case .terminal:
+            TerminalWidget(shell: AppServices.shared.quickShell,
+                           onEditingChanged: { viewModel.isPageEditing = $0 })
+        case .devServers:
+            DevServersWidget()
+        case .calculator:
+            CalculatorWidget(onEditingChanged: { viewModel.isPageEditing = $0 })
+        case .worldClock:
+            WorldClockWidget()
 
         }
     }
@@ -414,7 +547,7 @@ struct AddNookWidgetMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(NookWidgetKind.allCases) { kind in
+            ForEach(NookWidgetKind.alphabetical) { kind in
                 Button {
                     settings.setEnabled(true, for: kind)
                 } label: {
@@ -436,191 +569,39 @@ struct AddNookWidgetMenu: View {
     }
 }
 
-private struct NookTimerWidget: View {
-    @ObservedObject var service: TimerService
-    let style: WidgetVisualStyle
-    let compact: Bool
-
-    var body: some View {
-        Group {
-            if compact {
-                HStack(spacing: 6) {
-                    if service.isRunning {
-                        Text(service.remainingText)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .layoutPriority(1)
-                        ProgressView(value: service.progress)
-                            .tint(
-                                style == .terminal
-                                    ? ThemeStore.shared.notch.accent
-                                    : .orange
-                            )
-                        Button {
-                            service.cancel()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    } else {
-                        ForEach([5, 15, 25], id: \.self) { minutes in
-                            Button("\(minutes)") { service.start(minutes: minutes) }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 9, weight: .bold))
-                                .frame(maxWidth: .infinity, minHeight: 20)
-                                .background(
-                                    .primary.opacity(0.08),
-                                    in: RoundedRectangle(cornerRadius: 6)
-                                )
-                        }
-                    }
-                }
-                .padding(.horizontal, 9)
-            } else if service.isRunning, style == .orbit {
-                ZStack {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.10), lineWidth: 7)
-                    Circle()
-                        .trim(from: 0, to: service.progress)
-                        .stroke(
-                            ThemeStore.shared.notch.accent,
-                            style: StrokeStyle(lineWidth: 7, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                    VStack(spacing: 2) {
-                        Text(service.remainingText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                        Button("Cancel") { service.cancel() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-            } else {
-                VStack(spacing: 8) {
-                    if service.isRunning {
-                        Text(service.remainingText)
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        ProgressView(value: service.progress)
-                            .tint(style == .terminal ? ThemeStore.shared.notch.accent : .orange)
-                            .padding(.horizontal, 14)
-                        Button("Cancel") { service.cancel() }
-                            .buttonStyle(.plain)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "timer")
-                            .font(.system(size: 21, weight: .medium))
-                            .foregroundStyle(.orange)
-                        HStack(spacing: 5) {
-                            ForEach([5, 15, 25], id: \.self) { minutes in
-                                Button("\(minutes)") { service.start(minutes: minutes) }
-                                    .buttonStyle(.plain)
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .frame(width: 25, height: 22)
-                                    .background(
-                                        .primary.opacity(0.08),
-                                        in: RoundedRectangle(cornerRadius: 7)
-                                    )
-                                    .help("Start \(minutes)-minute timer")
-                            }
-                        }
-                    }
-                }
-            }
+extension NookWidgetSize {
+    var symbol: String {
+        switch self {
+        case .small: return "square.split.1x2"
+        case .medium: return "rectangle.portrait"
+        case .large: return "rectangle"
         }
     }
 }
 
-private struct NookClockWidget: View {
-    let style: WidgetVisualStyle
-    let compact: Bool
+/// Tiles fall out of the notch one after another as the Nook opens, so the
+/// panel reads as a drop rather than a window appearing.
+private struct NookTileEntrance: ViewModifier {
+    let index: Int
+    @State private var settled = false
+    @ObservedObject private var theme = ThemeStore.shared
 
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            if compact {
-                HStack(spacing: 5) {
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(
-                            .system(
-                                size: 14,
-                                weight: .bold,
-                                design: style == .terminal ? .monospaced : .rounded
-                            )
-                        )
-                        .monospacedDigit()
-                        .lineLimit(1)
-                    Spacer(minLength: 2)
-                    Text(context.date, format: .dateTime.weekday(.abbreviated))
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 9)
-            } else if style == .terminal {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("LOCAL_TIME")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ThemeStore.shared.notch.accent)
-                    Text(context.date, format: .dateTime.hour().minute().second())
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                }
-            } else if style == .orbit {
-                ZStack {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.10), lineWidth: 5)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(Calendar.current.component(.second, from: context.date)) / 60)
-                        .stroke(
-                            ThemeStore.shared.notch.accent,
-                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                }
-                .padding(12)
-            } else if style == .mono {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("LOCAL / \(context.date.formatted(.dateTime.weekday(.abbreviated)))")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ThemeStore.shared.notch.accent)
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .monospacedDigit()
-                }
-            } else if style == .frame {
-                HStack(spacing: 9) {
-                    Rectangle()
-                        .fill(ThemeStore.shared.notch.accent)
-                        .frame(width: 2, height: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(context.date, format: .dateTime.hour().minute())
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        Text(context.date, format: .dateTime.weekday(.wide))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                VStack(spacing: 5) {
-                    Text(context.date, format: .dateTime.hour().minute())
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                    Text(context.date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+    func body(content: Content) -> some View {
+        content
+            .opacity(settled ? 1 : 0)
+            .offset(y: settled || theme.reduceMotion ? 0 : -18)
+            .scaleEffect(settled || theme.reduceMotion ? 1 : 0.94, anchor: .top)
+            .blur(radius: settled || theme.reduceMotion ? 0 : 5)
+            .onAppear {
+                guard !settled else { return }
+                let delay = theme.reduceMotion ? 0 : 0.05 + Double(min(index, 8)) * 0.035
+                withAnimation(Design.dropAnimation.delay(delay * Design.demoTimeScale)) { settled = true }
             }
-        }
     }
+}
+
+/// The album-art wash, following the current track.
+private struct ArtworkAmbienceFollowing: View {
+    @ObservedObject var nowPlaying: NowPlayingController
+    var body: some View { ArtworkAmbience(artwork: nowPlaying.info.artwork) }
 }

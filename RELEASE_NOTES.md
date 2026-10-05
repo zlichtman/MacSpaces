@@ -1,13 +1,16 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.68
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.68** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.68:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **World Clock widget.** Your cities' times on a dot-matrix board ("06:28 LOS ANGELES"), with the unlit dots faintly showing, a ticking colon, your own city in the accent colour and minutes that flick over like a split-flap sign. Pick up to five cities in its settings.
+- **A calmer agent notch.** No more text beside the notch: just the agent's app icon with a ring that sweeps round it while it works (pulsing orange when it needs you, a full green circle when it's done) and a matching animation on the other side, at the normal width. The full detail is in the Agents tab.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in 2.67:
+
+- **Names, not numbers.** New Messages in the notch show the sender's name from your Contacts instead of their phone number or email (Contacts access is asked for the first time it's needed).
+- **GitHub in numbers.** Under the contribution graph: your current and longest streak, this week, your best day, a bar for each month, active days and your busiest weekday, all from your real daily counts.
+- **Clearer usage.** The Usage tab ranks your top five projects and top models with bars, and the two-week chart has day labels and its peak.
+- **Agents fit beside the notch.** When an agent shares the notch with music or another activity, its action no longer cuts off ("Thi…g…"), and its status dot is coloured on every theme.
