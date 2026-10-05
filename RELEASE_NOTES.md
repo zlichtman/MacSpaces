@@ -1,13 +1,11 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.51
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.51** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.51:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Baskets in the Tray.** With file baskets, the Nook's Tray page shows a chip for the Tray and for each basket, so you can see and use any of them from the notch. Right-click a basket's chip to put it on the desktop or remove it.
+- **Baskets stay put.** A basket parked beside the Dock folds back to exactly the same spot after you open it.
+- **Remove the basket you mean.** Remove Basket in a basket's menu now lists every basket by name, so the one you're looking at is never removed by accident.
+- **Cleaner Poster lyrics.** The lines behind Poster lyrics are gone.
