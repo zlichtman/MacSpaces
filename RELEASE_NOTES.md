@@ -1,13 +1,12 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.58
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.58** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.58:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Three new lyric styles.** Stickers (Poster, with a little animation when a line mentions a heart, a map, the rain, fire, the stars and more), Karaoke (the line fills in as it's sung) and Typewriter. Six in all, in Settings → Appearance → Lyrics, which now opens like the theme drawers.
+- **Do Not Disturb while you focus.** The Focus timer has a moon button: after a one-time Shortcuts setup, focus sessions turn Do Not Disturb on and off.
+- **Coding tabs.** The Terminal page's coding column has tabs (Today, Usage, GitHub, Servers) instead of a long scroll.
+- **A cleaner Settings window.** No strip across the top: pages scroll softly under the title bar and the sidebar runs to the top edge.
+- **Fresh README pictures.**

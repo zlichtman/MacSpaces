@@ -39,6 +39,14 @@ enum QuickActions {
         runAppleScript("tell application \"Finder\" to empty trash")
     }
 
+    /// Turns the displays off without sleeping the Mac or locking it.
+    static func sleepDisplays() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        task.arguments = ["displaysleepnow"]
+        try? task.run()
+    }
+
     static func openScreenSaver() {
         // Locking via screensaver respects the user's password-delay setting.
         let url = URL(fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app")

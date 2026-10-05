@@ -57,8 +57,9 @@ struct ShortcutsWidget: View {
                 HStack {
                     Text("Shortcuts").font(.headline)
                     Spacer()
-                    Button { service.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    RefreshButton { service.refresh() }
                         .buttonStyle(.plain)
+                        .help("Refresh shortcuts")
                 }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 5) {

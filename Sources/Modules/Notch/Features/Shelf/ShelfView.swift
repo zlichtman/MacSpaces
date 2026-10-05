@@ -94,6 +94,7 @@ struct ShelfView: View {
                     actionButton("Open", systemImage: "arrow.up.forward.app") { store.open(item) }
                     actionButton("Reveal in Finder", systemImage: "folder") { store.revealInFinder(item) }
                     actionButton("Copy", systemImage: "doc.on.doc") { store.copyToPasteboard(item) }
+                    actionButton("AirDrop", systemImage: "dot.radiowaves.left.and.right") { store.airDrop(item) }
                     actionButton("Remove from Tray", systemImage: "xmark") {
                         Haptics.drop()
                         store.remove(item)
@@ -110,6 +111,13 @@ struct ShelfView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button { store.airDropAll() } label: {
+                    Label(store.items.count == 1 ? "AirDrop" : "AirDrop All", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .help("Send every file here with AirDrop")
                 Button {
                     Haptics.drop()
                     store.removeAll()
@@ -233,6 +241,7 @@ private struct ShelfItemView: View {
                 }
             }
             if type?.conforms(to: .image) == true || type?.conforms(to: .pdf) == true {
+                Button("Copy Text") { store.copyText(item) }.disabled(isBusy)
                 Button("Extract Text…") { store.process(item, operation: .extractText) }.disabled(isBusy)
             }
             Divider()
