@@ -9,7 +9,6 @@ DERIVED_DATA="$STAGING_ROOT/DerivedData"
 PROJECT_BUILD_ROOT="$STAGING_ROOT/Project"
 APP_SOURCE="$DERIVED_DATA/Build/Products/Release/MacSpaces.app"
 APP_STAGED="$STAGING_ROOT/MacSpaces.app"
-DMG_ROOT="$STAGING_ROOT/dmg"
 DMG_STAGED="$STAGING_ROOT/MacSpaces.dmg"
 DMG_PATH="$RELEASES_DIR/MacSpaces.dmg"
 VERIFY_MOUNT="$STAGING_ROOT/verify-mount"
@@ -52,6 +51,7 @@ xcodegen generate \
   -configuration Release \
   -destination 'generic/platform=macOS' \
   -derivedDataPath "$DERIVED_DATA" \
+  -skipPackagePluginValidation \
   ARCHS='arm64 x86_64' \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGNING_ALLOWED=NO \
@@ -99,18 +99,8 @@ fi
 codesign --verify --deep --strict --verbose=2 "$APP_STAGED"
 
 package_dmg() {
-  rm -rf "$DMG_ROOT"
-  mkdir -p "$DMG_ROOT"
-  ditto "$APP_STAGED" "$DMG_ROOT/MacSpaces.app"
-  codesign --verify --deep --strict --verbose=2 "$DMG_ROOT/MacSpaces.app"
-  ln -s /Applications "$DMG_ROOT/Applications"
   rm -f "$DMG_STAGED"
-  hdiutil create \
-    -volname "MacSpaces $VERSION" \
-    -srcfolder "$DMG_ROOT" \
-    -ov \
-    -format UDZO \
-    "$DMG_STAGED"
+  "$PROJECT_ROOT/Scripts/build-installer.sh" "$APP_STAGED" "$DMG_STAGED" "MacSpaces $VERSION"
 }
 
 NOTARIZATION_STATUS="Not submitted"
@@ -122,11 +112,13 @@ if [[ "$NOTARIZE" == "1" ]]; then
 
   NOTARY_ZIP="$STAGING_ROOT/MacSpaces-notary.zip"
   ditto -c -k --sequesterRsrc --keepParent "$APP_STAGED" "$NOTARY_ZIP"
+  NOTARY_STARTED=$SECONDS
   xcrun notarytool submit \
     "$NOTARY_ZIP" \
     --keychain-profile "$NOTARY_PROFILE" \
     --wait \
     --timeout 30m
+  echo "Notarized the app in $((SECONDS - NOTARY_STARTED)) s"
   xcrun stapler staple "$APP_STAGED"
   xcrun stapler validate "$APP_STAGED"
   NOTARIZATION_STATUS="Accepted and stapled"
@@ -155,17 +147,19 @@ if [[ "$VERIFY_ARCHS" != *arm64* || "$VERIFY_ARCHS" != *x86_64* ]]; then
 fi
 
 if [[ "$NOTARIZE" == "1" ]]; then
+  NOTARY_STARTED=$SECONDS
   xcrun notarytool submit \
     "$DMG_STAGED" \
     --keychain-profile "$NOTARY_PROFILE" \
     --wait \
     --timeout 30m
+  echo "Notarized the disk image in $((SECONDS - NOTARY_STARTED)) s"
   xcrun stapler staple "$DMG_STAGED"
   xcrun stapler validate "$DMG_STAGED"
 fi
 
 # A release is publishable only when the app survives an actual image
-# round-trip with its bundle signature and both architectures intact.
+# round-trip with its bundle signature and Apple Silicon architecture intact.
 mkdir -p "$VERIFY_MOUNT"
 hdiutil attach \
   -nobrowse \

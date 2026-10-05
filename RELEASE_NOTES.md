@@ -1,13 +1,10 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.57
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.57** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.57:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Your coding day, on the Terminal page.** Beside the shell: Claude Code and Codex sessions working right now, today's tokens and Claude's last five hours, Codex's plan limits with when they reset, a two-week chart, your most-used projects and models, your GitHub contribution graph and your local dev servers.
+- **Tighter timers.** The Timers page lost its empty space and card headers, and the closed notch shows every running timer, soonest first.
+- **Private by design.** Token counts come from Claude Code's and Codex's own logs on your Mac; only the public GitHub calendar is fetched, at most hourly.
