@@ -1,115 +1,188 @@
-# MacSpaces 1.14
+# MacSpaces
 
 **Music, little tasks, and files. Right at your notch.**
 
-[Download MacSpaces 1.14](https://github.com/zlichtman/MacSpaces/releases/download/v1.14/MacSpaces.dmg) · [Website & demo](https://zlichtman.com/open-source#macspaces) · [All releases](https://github.com/zlichtman/MacSpaces/releases)
+[Website & demo](https://zlichtman.com/open-source#macspaces) · [Releases](https://github.com/zlichtman/MacSpaces/releases) · [Report an issue](https://github.com/zlichtman/MacSpaces/issues)
 
-![MacSpaces 1.14 in the Everforest theme: Catacombs by Fog Lake playing, a countdown, the clock and the weather](Demos/1.x/screenshots/everforest-nook.webp)
+![MacSpaces 2.x in the Everforest theme: Catacombs by Fog Lake playing, a countdown, the clock and the weather](Demos/2.x/screenshots/everforest-home.webp)
 
 MacSpaces is a free, native menu-bar app that turns the notch into a small
-workspace. Move the pointer to the top of the screen to open the **Nook**. You can
-change the song, start a timer, jot a note or check the weather there. Switch to
-**Tray** to park a file between apps. Move away, and the Nook tucks back into the notch.
+workspace. Move the pointer to the notch to open the **Nook**: change the song,
+join your next call, start a timer, jot a note or park a file. Move away, and it
+tucks back in. Displays without a camera notch get a small synthetic one.
 
-No camera notch? MacSpaces adds a small synthetic one to other displays.
+## Download
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized · MIT licensed**
+**MacSpaces 2.55** is the current release, for macOS 15 or later on Apple silicon
+and Intel. It's signed and notarized.
 
-## Install
+- [Download MacSpaces 2.55](https://github.com/zlichtman/MacSpaces/releases/download/v2.55/MacSpaces.dmg), open the disk image and drag **MacSpaces** into **Applications**.
+- Or use Homebrew: `brew install --cask zlichtman/tap/macspaces`. You don't need `brew tap` first; installing by the full name adds [the tap](https://github.com/zlichtman/homebrew-tap) for you.
 
-1. [Download MacSpaces 1.14](https://github.com/zlichtman/MacSpaces/releases/download/v1.14/MacSpaces.dmg).
-2. Open the disk image and drag **MacSpaces** into **Applications**.
-3. Open MacSpaces. It runs in the menu bar, with no Dock icon or window.
-
-Or use Homebrew. You don't need `brew tap` first; installing by the full name
-adds the tap for you:
+MacSpaces runs in the menu bar, with no Dock icon or window. After installing, open
+it once:
 
 ```sh
-brew install --cask zlichtman/tap/macspaces
 open -a MacSpaces
 ```
 
-MacSpaces comes from its own tap, [zlichtman/homebrew-tap](https://github.com/zlichtman/homebrew-tap),
-not from Homebrew's official cask list.
+MacSpaces updates itself: it downloads each new version and asks before restarting.
 
-Installed 1.0.0? It's the same app, now named 1.14. There's nothing to update.
+## What's inside
 
-## The Nook
+**A dock under the Nook.** The Nook hangs just below the notch, and a separate dock
+under it opens full pages:
 
-The Nook is a set of widgets you choose. Add, remove and reorder them in
-**Settings → Widgets**, and save profiles for different parts of your day. Small
-widgets stack beside larger ones, and the Nook sizes itself to fit.
+- **Music:** the cover beside the title, a slim seek bar and big controls, tinted by the album art, with lyrics in sync in one of three styles: **Classic**, **Poster** (the line's biggest word as a headline) or **Choreography** (words step in one by one). Pick one in **Settings → Appearance → Lyrics**.
+- **Calendar:** how far through the year you are, a month grid with coloured event dots, and your day with Join buttons.
+- **Weather:** now, the next ten hours and the next four days, with feels-like, wind, humidity and rain.
+- **Terminal:** a shell in the notch for quick commands. Type `brew upgrade`, press Return, and move on; swipe up for earlier commands.
+- **Teleprompter:** your scripts, read just under the camera. It scrolls at your speed or follows your voice (on-device speech recognition), and it's hidden from screen sharing and recordings. Import text, Markdown, RTF or Word files.
+- **Timers:** as many as you like, each with its own name, plus focus sessions that can turn a real Focus mode on and off by running Shortcuts you pick.
+- **Shortcuts:** search and run any of your Shortcuts.
+- **Music** also has a sound-output menu: switch between speakers, headphones, AirPods and displays.
+- **Reminders, Notes, Clipboard, System, Mirror and Tray.**
 
-| | Widgets |
-| --- | --- |
-| **Listen** | **Media** for Apple Music, Spotify, and YouTube, SoundCloud, Bandcamp, Vimeo or Twitch in Safari, Chrome or Edge. **Audio Controls** set per-app volume (macOS 14.2+). |
-| **Plan** | **Calendar** (today's events), **Todos** (Reminders), **Weather**, **Clock** |
-| **Focus** | **Timer**, **Pomodoro**, **Notes**, **Keep Awake** |
-| **Do** | **Clipboard** history, **Shortcuts**, **Quick Actions**: dark mode, lock screen, screenshot a selection, empty Trash, screen saver |
-| **Check** | **Battery** for your Mac and paired Bluetooth accessories, with earbuds and case shown separately. **System Stats** and an optional camera **Mirror**. |
+Choose which pages appear, and their order, in **Settings → Widgets → Dock**.
 
 | | |
 | --- | --- |
-| ![KemoSabe: a focus timer, a note, clipboard history and the clock](Demos/1.x/screenshots/kemosabe-nook.webp) | ![MacSpaces theme: weather, system stats, quick actions and the clock](Demos/1.x/screenshots/midnight-nook.webp) |
+| ![The Music page in Everforest, playing Catacombs by Fog Lake](Demos/2.x/screenshots/everforest-music.webp) | ![The Calendar page in KemoSabe, with year progress, a month grid and today's events](Demos/2.x/screenshots/kemosabe-calendar.webp) |
+| **Music** in Everforest, with Catacombs by Fog Lake | **Calendar** in KemoSabe |
 
-**Lyrics and captions.** Turn on the caption bar to show the current synced
-lyric line under your widgets, or the caption line for a YouTube video.
+![The Weather page in the MacSpaces theme, with hourly and four-day forecasts](Demos/2.x/screenshots/midnight-weather.webp)
 
-## While the notch is closed
+**Widgets in three sizes.** Every Home widget can be Small, Medium or Large.
+Small widgets next to each other share a column, so you decide which ones pair
+up. Right-click a widget and choose **Size**, or use **Settings → Widgets**. With
+more than one Home profile, the dock gets a button for each.
 
-The closed notch shows compact live activities: the playing song, a running
-countdown, charging, volume, display and keyboard brightness, microphone mute,
-and Focus. Turn each one on or off in **Settings → Activities**.
+| | |
+| --- | --- |
+| ![Home in KemoSabe: a large Calendar with a month grid, Reminders, the clock and a focus timer](Demos/2.x/screenshots/kemosabe-home.webp) | ![Home in the MacSpaces theme: a large Weather forecast, Notes, Clipboard and Keep Awake](Demos/2.x/screenshots/midnight-home.webp) |
 
-## Tray
+**Widgets that do more.**
 
-![Two files held in the Tray, in the KemoSabe theme](Demos/1.x/screenshots/kemosabe-tray.webp)
+- **Calendar:** your current or next event, with a **Join** button for Zoom, Meet, Teams and other video calls.
+- **Reminders:** check them off right in the tile.
+- **Timer:** custom lengths, pause and +1 minute. **Focus timer:** your own focus and break lengths.
+- **Clipboard:** click a recent clip to copy it again, or turn on the paste queue (below).
+- **Terminal:** the same quick shell as the Terminal page, right on Home.
+- **Notes:** your latest notes, and a one-click New.
+- **Weather:** a four-day forecast on Large, in °C or °F.
+- **Clock:** 24-hour time, seconds, and a second time zone.
+- **Keep Awake:** one tap, for 15 minutes, an hour, two hours, or until you stop it.
+- **Quick Actions:** labelled buttons, including Lock and Display off.
+- **Messages:** new messages slide down under the notch with a Reply button, and you can reply from the Nook.
+- **Battery:** time left or until full, battery health, cycle count and the charger's wattage.
+- **Calculator:** sums, units and currencies as you type (`15% of 80`, `5 km in mi`, `100 usd to eur`); click the answer to copy it.
+- **Dev servers:** your local servers by port and project, to open in the browser or stop.
 
-Drag a file to the notch and pause for a moment to open **Tray**. Preview it with
-Quick Look, open it, share it, compress it into a ZIP, or drag it into another
-app. Tray keeps a reference, so your original file never moves.
+**File Converter.** Drag a file and hold **Shift**: a wheel of formats appears around
+the pointer. Drop on one and a converted copy is saved beside the original. Hold
+**Option-Shift** for tools instead: compress, remove metadata, resize, extract audio,
+make a GIF or a snapshot, split or merge PDFs, zip and unzip. It covers images, PDFs,
+documents, video and audio, several files at once, and nothing leaves your Mac.
+Turn it on or off from the menu bar or **Settings → General**.
 
-## Themes
+**File baskets.** Choose **File Baskets** in the menu bar for a little frosted circle
+you can park anywhere, say beside the Dock. Drop files on it, click to open it, drag
+to move it; it folds back to the same spot. Your baskets also appear on the Nook's
+Tray page. The Tray and baskets can AirDrop one file or all of them. Right-click one to remove it; the files themselves stay where they are.
 
-![Appearance settings with the five app themes and the palette collection](Demos/1.x/screenshots/settings-appearance.webp)
+**Clipboard history anywhere.** Press **⇧⌘C** in any app for a searchable list of
+everything you've copied, at the pointer. It works from the keyboard: type to search
+(exact, fuzzy or regular expression), ↑↓ to choose (⇧ for several), ↩ to copy, ⌥↩ to
+paste straight into the app you were in, ⌥⇧↩ to paste as plain text, ⌘1–9 to copy and
+⌥1–9 to paste the first nine, ⌥P to pin, ⌥⌫ to delete. A preview shows the whole clip,
+the app it came from and when (and how often) you copied it, with image thumbnails
+and colour swatches. **Settings → Clipboard** sets the shortcut, history size (up to
+1,000), sorting, pins on top or bottom, pausing, and what's ignored: apps, patterns
+and clipboard formats.
 
-Pick **MacSpaces, PowderMeet, Heartable, KemoSabe or Tsukumo**, or a classic
-palette such as Catppuccin, Dracula, Everforest, Gruvbox, Nord, Solarized or
-Tokyo Night. Each has light and dark versions and follows one
-**System / Light / Dark** setting. Animations respect Reduce Motion.
+**Paste queue.** Turn it on with the list button on the Clipboard page or widget,
+copy several things, then press ⌘V again and again: each paste is the next clip, in
+the order you copied them or newest first. The closed notch shows how many are left.
+
+**More in the closed notch.** A video meeting counts down from ten minutes before it
+starts. Turn on **Activities → Coding agents** and Claude Code and Codex show when
+they're working, need you, or have just finished (MacSpaces adds one silent hook,
+keeping your own).
+
+**Notifications through the notch.** New Messages, and if you like other apps'
+notifications, slide down under the camera as a card for a few seconds. Cards never
+appear in screen sharing or recordings, or while your Mac is locked
+(**Settings → Activities → Notifications**).
+
+**Screenshots land in the Tray.** Turn it on in **Settings → General**: each new
+screenshot shows beside the notch for a moment and waits in the Tray, ready to drag,
+AirDrop, copy, or **Copy Text**.
+
+**Hide in apps.** Choose apps, such as a game or a presentation, in front of which
+the Nook steps away entirely (**Settings → General**).
+
+**Sound bars in the notch.** While music plays, the closed notch shows moving bars
+in your theme's colours. They stay still with Reduce Motion.
+
+**Out of the way.** Hovering doesn't open the Nook over Mission Control, and an
+open Nook steps aside when Mission Control appears.
+
+**A low-battery warning for coding agents.** Turn on **System → Warn at 20%** and,
+when your Mac is on battery at 20% or below, running Claude Code and Codex sessions
+are told to save and commit their work and hold off on long jobs. MacSpaces adds one
+hook to `~/.claude/settings.json` and `~/.codex/hooks.json` (keeping a backup of your
+original), and turning the switch off removes it.
+
+**Themes.** Fifty themes in four drawers: **Core** (the MacSpaces app themes),
+**Terminal** (classic editor palettes such as Dracula, Nord and Catppuccin, quiet
+single colours, Karma and **Custom**, where you pick your own colours), **Nature**
+(petals drifting down in Blossom, rain in Monsoon, lightning in Thunderstorm,
+fireflies, falling snow and leaves) and **Live** (a rainbow keyboard wave, a neon
+Synthwave grid, Lava, Fireworks, Code Rain, Warp and more). Effects move only while
+the Nook is open and stay still with Reduce Motion; turn them off in
+**Settings → Appearance**.
+
+**Calendar credit.** The year progress bar and month grid follow Aaron Lichtman's
+DayDrop menu-bar calendar.
+
+**Settings that show what you'll get.** **Settings → Widgets** draws your Home layout
+to scale, with each widget's size and options. **Settings → Permissions** lists what
+each permission is used for.
+
+![The Home layout editor in Settings](Demos/2.x/screenshots/settings-widgets.webp)
 
 ## Privacy
 
-MacSpaces has no account and no analytics. A feature asks for access only when
-you turn it on: Camera for Mirror, Location for Weather (with an approximate IP
-fallback), Calendars and Reminders for their widgets, Bluetooth for Battery, and
-Automation for media details and Quick Actions.
+MacSpaces has no account and no analytics. A feature asks for access only when you
+turn it on: Camera for Mirror, Location for Weather (with an approximate IP fallback),
+Calendars and Reminders for their widgets, Bluetooth for Battery, Automation for
+media details, Quick Actions and Messages, Accessibility for the paste queue and
+pasting from history (to see and send ⌘V), the Microphone and Speech Recognition
+only while the teleprompter follows your voice (on your Mac), and Full Disk Access
+only if you turn on notifications through the notch.
 
-Clipboard history stays in memory, and copies that password managers mark as
-concealed or transient are never recorded. The app contacts only the services
-its features use: Open-Meteo and ipapi.co for weather, LRCLIB and lyrics.ovh for
-lyrics, and GitHub for updates.
-
-## MacSpaces 2.x (pre-release)
-
-MacSpaces 2.34 is the next version, for macOS 26 on Apple silicon. It adds a dock
-of full pages (Music, Calendar with year progress, Weather, Reminders, Timers and
-more), widget sizes, and many widget upgrades. It's a development build, so 1.14
-stays the default download. See the [2.34 README](https://github.com/zlichtman/MacSpaces#readme)
-or install it with `brew install --cask zlichtman/tap/macspaces@beta`.
+Clipboard history stays in memory unless you choose to keep it. Copies that
+password managers mark as concealed or transient are never recorded, and neither is
+text shaped like a credential, such as a private key, an access token, a card number
+or a block of `.env` secrets. The paste
+queue is never saved, and the notch shows only how many clips are left, never what
+they say. The File Converter works entirely on your Mac. The app contacts only the
+services its features use: Open-Meteo and ipapi.co for weather, LRCLIB and
+lyrics.ovh for lyrics, the European Central Bank (frankfurter.app) for currency rates
+when you convert a currency, and GitHub for updates.
 
 ## Build from source
 
-Install Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen), then run:
+Install Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen), then run:
 
 ```sh
 git clone https://github.com/zlichtman/MacSpaces.git
 cd MacSpaces
-git checkout v1.14
 make
 ```
 
-The [engineering guide](AGENTS.md) covers architecture, checks and releases.
+That builds 2.55. The
+[engineering guide](AGENTS.md) covers architecture, checks and releases.
 
 ## Contribute
 
