@@ -1,13 +1,9 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.53
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.53** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.53:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **Clipboard history anywhere.** Press ⇧⌘C in any app for a searchable list of what you've copied, right at the pointer. Use it from the keyboard: ↩ copies, ⌥↩ pastes straight into the app you were in, ⌥⇧↩ pastes as plain text, ⌘1–9 and ⌥1–9 copy or paste the first nine, ⇧ with the arrows picks several, ⌥P pins and ⌥⌫ deletes. A preview shows the whole clip, where it came from and how often you've copied it, with image thumbnails and colour swatches.
+- **Settings → Clipboard.** Choose the shortcut and where the list opens, keep up to 1,000 clips, sort by last, first or most copied, search exactly, fuzzily or with a regular expression, put pins at the top or bottom, pause recording or skip the next copy, clear history on quit, and leave out copies from chosen apps, matching patterns or clipboard formats.

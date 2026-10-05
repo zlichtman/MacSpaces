@@ -13,27 +13,22 @@ struct MacSpacesApp: App {
 
 private struct MenuBarMenu: View {
     @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var nookSettings = NookSettings.shared
 
     var body: some View {
         Toggle("Nook", isOn: $settings.notchEnabled)
-
-        if settings.notchEnabled {
-            Picker("Nook Profile", selection: $nookSettings.activeProfileID) {
-                ForEach(nookSettings.profiles) { profile in
-                    Text(profile.name).tag(profile.id)
-                }
-            }
-        }
+        Toggle("File Converter", isOn: $settings.fileConverterEnabled)
+        Button("File Baskets") { BasketWindowController.shared.show() }
 
         Divider()
 
-        Button("Settings…") {
+        Button("Settings") {
             SettingsWindowController.shared.show()
         }
         .keyboardShortcut(",")
 
-        Button("Check for Updates…") {
+        Divider()
+
+        Button("Check for Updates") {
             SettingsWindowController.shared.show(.general)
             UpdateService.shared.check()
         }
@@ -89,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #if DEBUG
         if AppearanceQAHarness.captureIfRequested() { return }
         if FeatureQAHarness.captureIfRequested() { return }
+        if WebsiteDemoCapture.captureIfRequested() { return }
         if VisualQAHarness.captureIfRequested() {
             return
         }
@@ -97,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         moduleCoordinator = ModuleCoordinator()
         moduleCoordinator?.start()
         UpdateService.shared.start()
+        BasketWindowController.shared.restoreOpenBaskets()
+        ConverterWheel.shared.setEnabled(AppSettings.shared.fileConverterEnabled)
+        ClipboardPopup.shared.registerShortcut()
 
         showSettingsObserver = DistributedNotificationCenter.default().addObserver(
             forName: Self.showSettingsNotification,
