@@ -1,0 +1,247 @@
+# MacSpaces 2.0.0 development status
+
+Build 28 targets macOS 26 and Apple Silicon. This is a local development build,
+not a completed 2.0 release. Stable GitHub release v1.0.0 is build 14; 2.0 remains unpublished.
+
+Implemented in this build:
+- Shared feature metadata drives all existing Nook widget titles, symbols and sizing.
+- Dependency-ordered lifecycle replaces the manual start/stop switchboard for media,
+  power, Bluetooth, system feedback, lyrics, weather, clipboard, stats and calendar.
+- Media notification observers start and stop with demand.
+- Music preserves the stable artwork, metadata and transport layout, with the separate caption bar below the widgets. No new source menu or in-player lyrics navigation is exposed.
+- The build supports project paths containing spaces.
+- Development builds do not query or install from the stable updater feed.
+
+Verification:
+- Scripts/check-core.sh: lazy creation, repeated demand, invalid demand, cycles,
+  reverse shutdown, start rollback, unavailable/duplicate actions and cancellation.
+- Scripts/check-appearance.sh: legacy/custom palette migration and contrast.
+- Scripts/check-update-revisions.sh: version and internal build comparisons.
+- Scripts/check-release-policy.sh: matching generated and source build metadata.
+- Native FeatureQA checks profile decoding, layout, notch clearance and power/device parsing.
+
+Remaining acceptance is tracked in FEATURE-AUDIT.md and feature-audit.json.
+Music transport and seeking now use the shared action registry, explicit provider capabilities, and validated source contexts. The existing music layout and separate caption bar are retained; unsupported controls remain disabled. The full
+module architecture, persistent data migration, messaging replies, real media
+queues, Tsukumo bridge, companion, encrypted sync and extension isolation remain
+unfinished. This build must not be advertised as feature parity or published as
+stable. Production 2.0 needs an OS/architecture-aware updater feed before release.
+
+Desktop tap fix (2026-09-27):
+- Both 1.0.0 build 12 and 2.0.0 development build 15 use the stationary Nook window policy.
+- Scripts/check-window.sh verifies the actual NSPanel class, Spaces/full-screen flags, keyboard eligibility and geometry.
+- Stable build 12 passed CI at commit 38f5ac117ce9fc4e19f8626b1bca6728cb679158, notarization, stapling and Gatekeeper.
+- Installed stable build 12 was confirmed in native Settings; Check Now returned up to date.
+- The desktop click could not be replayed through the automation tool: Finder's desktop target rejected coordinate clicks with noWindowsAvailable and its container rejected AX clicks. Live animation verification remains manual.
+
+Stability fixes (2026-09-27):
+- Stable 1.0.0 build 14 and development 2.0.0 build 15 disable SwiftUI window-size propagation; AppKit owns panel geometry. This addresses the recursive hosting-view resize path in the captured build 12 crash.
+- Tray retains the active profile width instead of expanding to the maximum width.
+- Window regression checks pass 120 alternating content-size cycles without moving or resizing the panel.
+- Stable build 14 passed CI at 1f1b22315080dad74579419394a10f7f36fc4580, signing, notarization, stapling, and Gatekeeper. Installed through the app updater; native Settings confirms build 14 and Check Now reports up to date.
+- A post-install sample showed 0.8% CPU and approximately 100 MiB RSS. This brief observation does not establish sustained performance or eliminate every possible crash.
+- Development build 15 passed Release compilation, playback/core/window checks, and native layout/device captures. Its signed archive is local and not notarized.
+
+Build 16 restores the stable music presentation and caption bar at the user’s request. The service/action safety work and window stability fixes remain in place.
+
+Build 17 integration work:
+- Authenticated local Tsukumo transport verifies both peers using kernel audit tokens and team/bundle requirements. Durable submission receipts prevent duplicate sends after reconnect or restart. MacSpaces exposes explicit typed prompts, conversation selection, status refresh, cancellation and Open. Approval decisions remain in Tsukumo. The real Tsukumo target compiles and its routing test passes with a fake agent. The receiver is an unshipped change in the private Tsukumo repository.
+- Rich clipboard capture preserves text, RTF/HTML, images, links, file references and colors. Search includes source names. Local persistence is opt-in and disk writes run on a serial background queue. Concealed/transient copies remain excluded. OCR indexing, tags UI and sync are not complete.
+- Multiple notes preserve the legacy scratchpad, stable IDs, deletion/restore and concurrent revision data. Concurrent local edits retain selectable versions; network sync is not connected.
+- Independent floating file baskets use separate persistent bookmark lists; the existing Tray remains intact.
+- Scripts/check-bridge.sh, check-bridge-transport.sh, check-notes.sh and check-clipboard.sh cover these new boundaries with isolated data. A passing transport test is not full companion or sync parity.
+
+Remaining live verification needs dedicated test conversations and explicit authorization before sending any Messages/WhatsApp/Telegram test replies. None have been sent. No CloudKit container, new phone build, notification-store adapter, or verified live messaging integration has been completed by this change.
+
+- Messages adapter: explicit conversation selection, participant identity recheck, Apple Event arguments instead of source interpolation, retained local drafts and uncertain-delivery handling are implemented. Scripts/check-messages.sh passes model, restart, script-compilation and argument-transport checks without sending a message. Live sending remains unverified until a dedicated test recipient is authorized. WhatsApp, Telegram and notification capture are still missing.
+
+Build 17 verification completed: MacSpaces Release compilation, isolated native basket/disconnected-widget captures and existing layout/device assertions pass. Tsukumo's actual app target compiles and the one MacSpacesBridgeTests test passes (zero failures/skips) in the 2026-09-27 20:50 xcresult. Installed apps and public releases have not been replaced by this unfinished integration work.
+
+Build 18 quick interactions:
+- Messages and Tsukumo occupy 38-point caption-style rows below the dashboard. They no longer consume widget columns; music and its caption bar are unchanged. Keyboard focus keeps the Nook open.
+- Messages resolves full contact names through Messages' own scripting interface, falling back to its display name or handle. Recipient verification still uses exact identifiers, never names.
+- Opt-in incoming Messages uses a read-only SQLite adapter for the local Messages database. It baselines on enable/restart, bounds previews to 20 new unread arrivals, never imports history, and has no persistent incoming-message store. Full Disk Access is required and must be granted by the user. Unsupported schemas and denied access fail closed until Retry.
+- Enabled incoming messages show a content-free count on the closed Nook and a preview/reply bar when open. Lock notifications clear incoming content; disabled features stop polling and remove observers. Exact conversation identity is required for inline reply.
+- Synthetic SQLite tests cover history exclusion, incoming/unread filtering, replay prevention, reset and unsupported schema. Live capture, real contact names, lock/unlock transitions and sending still require manual acceptance. No personal message database was read and no messages were sent during development verification.
+- This is Messages-specific capture, not a general notification-store implementation. Focus integration, native-banner suppression, WhatsApp/Telegram and phone sync remain unfinished.
+
+Build 18 verification: Release and isolated Debug builds pass; incoming-reader and reply safety scripts pass; native layout/device assertions and compact bar captures pass. The build is signed locally, not notarized or published.
+
+Build 19 presentation fixes:
+- The Messages recipient menu sizes to its actual label (with a bounded maximum), removing the large gaps around short contact and group names.
+- Release packaging now uses Scripts/build-installer.sh with a MacSpaces-branded, Retina Finder background, fixed app/Applications positions and install guidance. The installer uses the real app and Applications shortcut; there is no custom executable installer or extra permission prompt.
+- dmgbuild and its two dependencies are pinned in Scripts/installer/requirements.txt and installed only in the temporary packaging environment. MACSPACES_DMG_PYTHON can select an already provisioned packaging environment. Application payload/signature and notarization flow remain intact.
+
+Build 20 artwork and installer follow-up:
+- Completed artwork downloads now notify the active media controller, clearing the fallback cooldown and refreshing immediately. Failed/missing images retry after two seconds; metadata and controls remain independent of image I/O.
+- Cached/supplemental artwork checks title, artist, nonconflicting album/URL and provider identity; mismatching supplemental results no longer disable retries permanently. Download notifications are observed only while the media feature is active.
+- Playback fixture checks cover partial system metadata and rejection of different artist/album/provider covers. Live source-specific artwork availability remains dependent on the player's metadata and network.
+- Branded installer artwork uses correctly sized 1x/2x representations. The mounted Finder window was inspected with real app and Applications icons, readable labels and support assets outside the opening canvas, even with hidden files enabled. Application signatures survive the DMG round trip. The development image is not notarized or published as stable.
+
+Build 20 installation verified in native Settings (2.0.0, build 20). Final DMG was mounted and its app passed strict signature verification; Finder presentation inspected with both instructions visible. Development installer is local, signed and not notarized.
+
+Build 20 notarization completed (2026-09-27 local / 2026-09-28 UTC):
+- Apple accepted app submission b5b74182-ce91-49e5-a8ed-f3d410fd7dc5 and DMG submission f2f51839-ff98-4217-9d30-f0b7af621eec.
+- Both app and branded DMG are stapled. Strict signatures, stapler validation, mounted arm64 verification and Gatekeeper checks passed; Gatekeeper reports Notarized Developer ID.
+- The matching installed app is stapled and passes Gatekeeper. Local development ZIP/DMG were replaced with the accepted artifacts; metadata includes their new SHA-256 values and submission IDs.
+- Version, updater, appearance, window, playback and core checks passed. No new source build was required: these are the same build 20 signed code bytes. No public release, feed change or new GitHub CI claim is made. MacSpacesDevelopmentBuild remains enabled and the feature audit remains incomplete.
+
+Tsukumo handoff audit (2026-09-27): installed private Tsukumo is build 66 while its source spec says 65. Installed binary lacks bridge markers; the existing socket has no observed live listener and read-only authenticated discovery fails at connect. Receiver files remain untracked in the private checkout. Shared contract/transport/receipt sources match between checkouts. Fresh bridge receipt/model checks pass, but the signed transport harness now fails with a disconnected expected client; earlier transport success must not be treated as current validation. This needs diagnosis and an installed-pair test before shipment. A detailed local handoff was saved in Documents/Codex/Handoffs/MacSpaces-Tsukumo-Handoff.md.
+
+Bridge transport diagnosis (2026-09-27): the signed-transport failure was not a signature mismatch. Accepted sockets inherit the listener's O_NONBLOCK on Darwin, so the listener's first read failed with EAGAIN whenever the client was still verifying the server's signature; the listener closed the connection and the client reported "Bridge disconnected". LocalBridgeListener now switches each accepted socket to blocking mode (the 5-second socket timeouts apply), reports a redacted failure stage (identity, request, reply, write) through onFailure, and removes only the endpoint it bound when it stops. Scripts/check-bridge-transport.sh now runs the expected peer five times, a client that waits 1.5 s before writing, and a wrong identifier that must be refused at the identity stage; it passes with the Developer ID and Apple Development identities of team 28LJG7MXT3. Peer requirements are unchanged. The installed pair still needs a Tsukumo release with the receiver.
+
+Build 21 starter configuration:
+- New installs and explicit Reset use Music, Timer, Clock, Mirror and System Stats, with the existing caption bar enabled. Timer/Clock remain adjacent so the existing compact layout stacks them.
+- Users can remove/add/reorder all widgets. Existing profiles, including intentionally empty layouts, and explicit caption preferences are preserved; no reset is performed during installation. New captions persist across relaunch.
+- Mirror remains permission-gated and does not automatically request camera access.
+- Isolated preference regression checks exercise fresh setup, caption relaunch persistence, custom empty layout preservation and explicit reset.
+
+Build 22 incoming Messages and setup:
+- Incoming reception was enabled on the installed app, but its access status reported missing Full Disk Access. Sending uses separate Automation permission; successful submission does not prove reception access.
+- New arrivals are no longer filtered out when another device or Messages marks them read between polls. The initial baseline still excludes history. Temporary SQLite locks retry without clearing the cursor or disabling reception.
+- The Messages bar exposes a reception warning. Its compact options panel has a single access explanation, Open Settings and Check Access actions, and a listening state. It no longer leads with an unrelated successful-send status or repeats the permission instructions.
+- The permission must be enabled by the user in macOS Settings; the app does not grant itself access. Restart after granting it. Live receipt remains unverified until access is granted and a new message arrives.
+- Isolated incoming fixtures cover read-state races and exclusive-lock recovery; reply safety fixtures pass without sending messages.
+
+Build 22 passed Release compilation, native permission-state captures, notarization/stapling, and installed Gatekeeper verification.
+
+Build 23 removes the duplicate Notes label inside the widget preview; the dashboard supplies the single heading. Saved notes and the editor are unchanged.
+
+Build 23 quick-bar removal: Messages and Tsukumo use the same native right-click menu overlay as dashboard widgets, with a named Remove action for accessibility. Removal uses the existing persisted profile setting and clears the corresponding editing focus. Both remain available in Add Widget. Release compilation passes.
+
+Build 24 reference-inspired Nook shell:
+- Expanded content stays attached to the top edge; Nook/Tray navigation and existing controls form a compact detached dock below it. Music presentation, captions, profiles and themes remain intact.
+- Content clears the physical camera on every width. Window hit geometry includes panel, gap and dock; their shared hover region prevents collapse while crossing the gap.
+- The panel uses a thinner edge and no extra outer accent glow. The dock uses the selected theme.
+- Native synthetic captures cover hardware-notch, narrow and external-display layouts. Geometry, profile persistence and device regressions pass. No new feature-page navigation is claimed.
+
+Build 24 app and DMG accepted by Apple and stapled. Mounted app signature/Gatekeeper checks pass; installed app validates and native General settings confirms 2.0.0 (24). Window regressions pass 120 content-size transitions. The public release remains unchanged.
+
+Build 25 top clearance:
+- Removed extra padding below the physical camera and shortened the panel by the same amount, preserving widget height.
+- Expanded panel fill begins below the hardware camera band. Both top shoulders are transparent, exposing the underlying app toolbar.
+- Hit testing and file-drop activation exclude the transparent shoulders. Regression checks verify left/right pass-through and retained panel interaction; 120 geometry transitions and native narrow/external layout fixtures pass.
+
+Build 26 app navigation (2026-09-28):
+- Home keeps custom widgets; Music, Calendar, Coding, Notes, Weather and Tray have dedicated dock destinations. Settings sits beside Home.
+- Music automatically presents the existing caption bar without a lyrics button.
+- Calendar reads local Calendar accounts through EventKit. Permissions has a dedicated Settings destination, replacing the widget access card.
+- Coding reports the last 30 days of locally recorded Codex/Claude CLI tokens by model. Bounded scans disclose partial coverage; account limits and other providers are not implemented.
+- App-page service demand is tracked across displays and released on collapse/window removal.
+- Native fixture captures and layout checks pass. Coding fixtures verify cumulative counts, streamed duplicates, cache accounting and malformed input.
+
+Build 26 installation verification:
+- Release build, core lifecycle, coding usage, notes and release-policy checks passed.
+- App notarization: 71cb5f14-40c6-4f90-8b73-3c524cd33d47 (Accepted).
+- DMG notarization: 6fb9b154-e28e-49f3-a4eb-ea3f61d45024 (Accepted). Both stapled; mounted app passed strict signing and Gatekeeper verification.
+- Installed /Applications/MacSpaces.app; native General reads 2.0.0 (26), and the new Permissions page was verified in the installed app. Existing Calendar, Reminders and Camera grants remain visible; no new grants were made.
+
+Build 27 UI refinement (2026-09-28):
+- Rounded expanded panel shoulders join the camera through a narrow neck; top side regions remain transparent.
+- Home and Settings share a separate right-hand dock group. Theme selection uses a paintbrush.
+- Music embeds lyrics within its page; Weather presents conditions and daily high/low inline without a hover popover.
+- Permissions group checkable statuses with Granted first and support manual refresh and refresh on app activation. Automation and Full Disk Access remain explicitly marked for System Settings review rather than claiming an unverified grant.
+- Home widget editor wraps tiles instead of scrolling horizontally. Profile rename is in its menu; the separate lyrics settings card is removed.
+- General order is Startup, Displays, Open & close, Motion, Updates. Development updates show version and local update status without inactive stable-feed controls.
+- Release build and native layout/device fixtures passed. Music, Weather, General and Permissions captures inspected.
+- Published stable Homebrew cask: https://github.com/zlichtman/homebrew-tap. `brew fetch --cask zlichtman/tap/macspaces` passed the pinned 1.0.0 checksum; no stable app was installed over the development app.
+
+Build 27 final installation: app notarization 0b0c11f2-317e-4168-9897-6edd2580f0dd; DMG notarization 72c1ea96-e35b-4471-9454-2359705b2890. Both accepted and stapled. Gatekeeper accepted the app. Installed General reports 2.0.0 (27); populated Home widget editor verified visually, and the active timer resumed after replacement.
+
+Build 28 spacing and Music refinement (2026-09-28): increased content inset below the notch, reduced the dashboard bottom inset and dock gap, and gave Music a taller page with 190 pt album artwork beside track metadata and controls. Lyrics remain directly below the player. Build/install in progress.
+
+Build 28 notarization: app 32c3d783-6fe4-41ec-a926-4447ca5d5619; installer 9fb1789e-2d6f-48bb-9c63-a1c960564a9b; accepted and stapled. Installed /Applications/MacSpaces.app, confirmed General reports 2.0.0 (28). The Music page now has 190 pt artwork, lyrics below, and a taller presentation.
+
+Build 29 Music layout (2026-09-28): the studio player centers the song title and artist above playback controls, with lyrics in the column beside the album artwork. Release compilation passed and a notarized development installer was produced.
+
+Build 30 notch spacing and dock cleanup (2026-09-28): removed the expanded-only rectangular neck so the panel has clear rounded shoulders; the camera drop remains visible only while collapsed. Increased clearance under the camera and between the panel and dock, and removed the paintbrush menu from dock navigation. README now documents the Homebrew tap for stable 1.0.0. The Music page centers the track information and places lyrics beside the cover, below the controls.
+
+Build 30 Release compilation succeeded. App notarization 13e6f82c-6cad-4d2f-b1d2-fc9f740dc08a and DMG notarization 515c435e-a7df-4a78-a946-5e1e45e2cf34 were accepted and stapled. The mounted app passed signature and Gatekeeper checks. Installed `/Applications/MacSpaces.app`; native General confirms 2.0.0 (30), and the installed app's stapled ticket validates.
+
+Build 31 Music refinement (2026-09-28): lyrics sit between the progress display and transport controls; the enlarged controls anchor the base of the right column. Lyrics remain centered within their available space.
+
+Build 31 Release compilation succeeded. App notarization 79880fe2-2afc-4975-bf65-e7ecceaf30cb and DMG notarization 6a8c1031-55c7-4feb-88fa-28fd37dcd0b5 were accepted and stapled. The mounted app passed signature and Gatekeeper checks. Installed `/Applications/MacSpaces.app`; native General confirms 2.0.0 (31), and the installed app's stapled ticket validates.
+
+Build 32 fixes a CI-only access-control diagnostic by declaring the coding-usage accumulator initializer explicitly.
+
+Build 32 Release compilation succeeded. App notarization 5b31b737-a876-451d-993b-6bcc5a9957da and DMG notarization 5def47c1-c563-4168-9084-c8bc88160b83 were accepted and stapled. The mounted app passed signature and Gatekeeper checks. Installed `/Applications/MacSpaces.app`; native General confirms 2.0.0 (32), and the installed app's stapled ticket validates.
+
+2.32 working tree (2026-09-28, unreleased; not built into an installer):
+- Versioning: from 2.x the public version is major.build, so build 32 reads 2.32. The integer build still drives updates; Scripts/check-release-policy.sh enforces the match. 1.0.0 predates the scheme.
+- Music: scrubber and times sit directly above the transport; artist and album subtitle; lyric status text is secondary; controls no longer dim on every command; play/pause flips immediately and reverts if the player does not follow; progress advances smoothly between polls; artwork opens the playing app when known.
+- Home sizes: every widget has Small/Medium/Large (per profile, from the tile's Size menu or Settings). Adjacent Small widgets stack; defaults preserve existing layouts; unknown sizes decode to defaults. Window reservation includes sizes.
+- Widgets: Timer pause/resume, +1 min, custom length and configurable presets; Focus timer with explicit controls, lengths and a daily session count; one-tap Keep Awake with duration chips; labelled Quick Actions (adds Lock and Display off); Clipboard copies straight from the tile; Notes shows recent notes with New; Calendar shows current/next events, progress, tomorrow's first event and a Join button for video links; Reminders complete from the tile; Weather adds units and a four-day forecast on Large; Clock adds 24-hour, seconds and a second time zone; Battery shows accessories on Macs without a battery; System Stats gauges and filled sparklines. Every stackable widget has a compact form.
+- Motion: tiles drop out of the notch in sequence when Home opens; a file dragged near the closed notch swells it with an accent rim and "Drop to Tray" before Tray opens. Both honour Reduce Motion.
+- Settings: Widgets shows profile chips, a to-scale Home preview with drag reordering, the selected widget's size and options, a grouped library and the captions toggle. Permissions lists only access MacSpaces uses, names the widgets using each, and only flags missing access for enabled widgets. Unused microphone, folder and legacy Bluetooth usage strings were removed.
+- App icon: full-bleed artwork so macOS 26 applies its own mask instead of a grey legacy tile.
+- Verification: Debug FeatureQA captures (Home size combinations, settings, drop state), interaction/size/device regressions, core, playback, window, appearance, release-policy, update, notes, clipboard, coding-usage, bridge and messages checks pass; Release compilation passes. check-bridge-transport needs MACSPACES_TEST_SIGNING_IDENTITY and was not run.
+
+2.33 additions after the first 2.33 snapshot (2026-09-28): Music page redesign (cover-aligned column, accent lyrics, custom scrubber, album ambience clipped to the panel), Weather page with hourly and four-day forecasts and details, Calendar page and widget with DayDrop-style year progress and month grid (reimplemented; credit to Aaron Lichtman), configurable dock with Reminders, Timers, Clipboard and System pages, two-row compact timers, and a 6 pt gap between the camera housing and the open panel. Layout regressions updated for the gap; all checks except check-bridge-transport (needs a signing identity) pass.
+
+2.34 (build 34, 2026-09-29): the Music page is about 15% smaller (572 × 336 panel, 180 pt cover, 20 pt title, 40 pt play button). Published as a pre-release; 2.33 remains available.
+
+2.35 (build 35, 2026-09-30): Noir, Rosé Pine, Kanagawa, Ayu and Custom themes; the opt-in low-battery agent alert (System page; AgentPowerAlert writes a flag file at 20%/10%/5% on battery and installs one silent hook in ~/.claude/settings.json and ~/.codex/hooks.json; Scripts/check-agent-hooks.sh covers the JSON merge); battery details from IOKit (time remaining, health, cycles, adapter watts); the animated notch equalizer restored from 1.14 (Reduce Motion keeps it still); adaptive Settings layout with a compact sidebar below 720 pt and a 720 × 520 minimum; stable Media widget layout by measured width. Published as a pre-release; 2.34 remains available.
+
+2.36 (build 36, 2026-09-30): 2.x updates itself. Pre-release builds read the GitHub release list and install the newest release with the same major version (ReleaseRevision.newest; covered by check-update-revisions), downloading automatically by default and asking before relaunch; checks repeat hourly, at most every six hours. The Settings Updates card shows the channel, Check Now and the download toggle for 2.x, and the logo is rounded. End-to-end test: a 2.34-labelled Developer ID copy found v2.35 on GitHub, downloaded, verified and staged it, and reached the install prompt.
+
+2.37 (build 37, 2026-09-30): 2.x targets macOS 15 and builds universal (arm64 and x86_64), like 1.x. Nothing in the code required macOS 26: a macOS 15 (and a macOS 13) build compiles with no availability errors. The app icon moved to Sources/Resources/AppIcon.icon so macOS 26 draws it natively (black image layer under the slashes; a solid fill renders dark grey) and Xcode generates the rounded icon older macOS uses. The updater rejects downloads whose LSMinimumSystemVersion or architectures this Mac can't run and remembers that build. Verified: all check scripts; the Intel slice under Rosetta passes the full FeatureQA capture and regression run. Not verified on a real macOS 15 machine.
+
+2.37 made official (2026-09-30): the v2.37 GitHub release is no longer a pre-release and is Latest; 1.14 stays published for macOS 13 and 14. README, release notes and Homebrew now present 2.37 as current (`macspaces` = 2.37, new `macspaces@1` = 1.14). App source unchanged from the notarized 2.37 installer.
+
+2.38 (build 38, 2026-09-30): theme drawers (ThemeCollection: Core, Terminal, Nature, Sweets, Studio; collapsible in Settings, submenus in the Nook menu); 19 new palettes (all pass the 4.5:1 text check); optional theme patterns (ThemeMotif) behind the open Nook and on theme cards, faded toward the center; Karma replaces One Dark with migration; the Tsukumo quick bar ("agents" widget) and TsukumoBridgeClient removed (saved profiles drop the widget; the bridge contract and transport stay for the planned Tsukumo page); MacSpacesDevelopmentBuild removed, so 2.x reads releases/latest and downloads updates by default; a clear message when MacSpaces isn't in Applications. QA captures cover every drawer in dark and light and six patterned themes.
+
+2.39 (build 39, 2026-09-30): Sweets and Studio replaced by Live (10 animated effects) and Minimal (Noir, Glass, Carbon, Cobalt, Acid); Nature grows to 15 with Monsoon, Thunderstorm, Firefly, Starlight and Autumn; Terminal gains Night Owl and Tomorrow Night (15). Every Nature and Live theme draws an effect that animates at up to 30 fps only while the Nook is open (TimelineView paused otherwise and under Reduce Motion); offscreen render benchmark: under 0.5 ms per frame each, Code Rain about 3 ms. Retired 2.38 themes migrate (ThemeFamily.replaced, checked). Drawer colour dots and the Widgets "Below the widgets" lyrics card removed. Shared bridge files synced byte-for-byte with Tsukumo (contract v2 plus MacSpacesAgentsContract.swift, agents channel v3); check-bridge covers agents fixtures and can cmp against a Tsukumo checkout. TsukumoAgentsClient written; the Tsukumo page itself is in progress.
+
+2.40 (build 40, 2026-09-30): the Tsukumo page. NotchTab.tsukumo (680 × 346, opt-in, hidden unless Tsukumo offers agents.v3; discovery errors such as "Sign in to Tsukumo" retry instead of hiding). AgentCharacterView draws all six shapes, four eye styles, the props and every state with live motion and still poses (Reduce Motion). TsukumoAppView: crew row with tag/focus, badges and progress ring; Together thread with partial replies; per-bot view with work strip, Follow and Review; approval bar (Deny/Allow, risky ones Open in Tsukumo only); composer with Check/Discard for uncertain sends; review sheet with files, colored excerpt, Request changes and Accept. QA captures from the spec fixtures. Two-process check against installed Tsukumo 79 with a team-signed build (AgentsProbe): discover offers agents.v3; hello (12 operations, avatar), list, approvals and changes answer with echoed request IDs.
+
+2.41 (build 41, 2026-10-02): volume, display and keyboard brightness feedback removed (macOS shows its own; drops the DisplayServices and CoreBrightness private frameworks); microphone and Focus remain. Theme effects and Tsukumo characters use `.periodic` TimelineView schedules so they no longer stop when the display-link schedule pauses; the sound bars restart their Core Animation after wake, screen wake or re-entering a window. Minimal merged into Terminal (20, Custom last); Terminal, Nature and Live ordered by accent colour. The Home Media widget redesigned after the Music page (no header, artwork wash, lyric line, slim scrubber, page-style transport); lyrics load whenever the widget is on Home.
+
+2.42 (build 42, 2026-10-02): Home widget headers removed (content identifies each tile; accessibility label kept). Click-to-select Home widgets with an accent outline; Delete/Forward Delete removes, ⌘Z or the Undo bar restores at the same position (sizes stay in the profile), Escape or an empty-space click deselects; selection clears when the Nook closes or leaves Home; keys pass through while a text field has focus. QA capture shows a selected widget. Home versions dock: with two or more profiles, a third capsule with one symbol button per profile (switches profile and opens Home); profile icons chosen from Settings → Widgets → Profiles (right-click → Icon), stored as an optional `symbol` that older builds ignore. RefreshButton (symbol rotate effect, still under Reduce Motion) for the Permissions and Shortcuts refresh buttons.
+
+2.43 (build 43, 2026-10-02): Tsukumo removed from MacSpaces at the owner's request (Tsukumo is a separate Mac app with its own side dock): the Tsukumo page, AgentCharacterView, TsukumoAgentsClient, the bridge (MacSpacesBridgeContract, LocalBridgeTransport, BridgeReceiptStore, MacSpacesAgentsContract), AgentsFixtures, AgentsProbe, check-bridge(-transport) and the CI step. The Coding page (Codex/Claude token usage), its service, reader and check removed too. Saved docks drop both pages; the default dock is Music, Calendar, Notes, Weather, Tray. The Tsukumo colour theme stays.
+
+
+2.44 (build 44, 2026-10-03): review fixes. Undo restores a removed Home widget into its originating profile (recentlyRemoved carries the profile ID) and shows it. The dashboard key monitor acts only on events from its own NotchWindow (NotchWindow.owner). Delete removes only without modifiers (the `case 51, 117 where` guard applied to 117 alone, so ⌘⌫/⌥⌫ removed widgets). The Pomodoro counts down to a deadline instead of decrementing per tick. New website Home still mode (MACSPACES_DEMO_KIND=home).
+
+2.45 (build 45, 2026-10-03): Terminal widget (`.terminal`, medium/large): one login shell (`QuickShell`, SwiftTerm 1.20.0 LocalProcessTerminalView, MIT, licence in Resources/Acknowledgements.txt) kept running while the widget is on Home; command bar with swipe/arrow history (`terminal.history`, max 100); Nook stays open while the bar has unsent text; a key NotchWindow is reordered on collapse to return the keyboard. Every xcodebuild passes -skipPackagePluginValidation for SwiftTerm's build plugin. Home lyric line registers a visible presentation (lyrics were stuck until the Music page opened). Closed pages linger as demand for 4 s (`lingeringTabs`) so services don't stop mid-close. CI splits checks and the Release build into parallel jobs; package-release.sh times each notarization; releases build while CI runs. Music page (Codex): lyrics column beside the cover, transport under the artwork with the timeline beside it; MACSPACES_QA_SCOPE=music-layout captures it. Hover/scroll never open the Nook while Mission Control or App Exposé shows (`MissionControl.isActive`).
+
+2.46 (build 46, 2026-10-03): LyricStyle (Classic, Lyric poster, Stanza stage, Phrase choreography, Waterformed, Psychedelic bloom) for the Music page, picked in Settings → Appearance → Lyrics (ThemeStore.lyricStyle, `lyrics.style`); styles use theme accent/ink, gradient glows instead of `.blur` shapes, timer-scheduled motion gated by animatesEffects and Reduce Motion; MACSPACES_QA_SCOPE=lyric-styles. Dock pages: Terminal (shares QuickShell; hosts only claim the view on creation), Shortcuts (search + six quick actions), Mirror. An open Nook closes when Mission Control appears (0.3 s check while open). Widget menus alphabetical. Audio widget, AudioMixerService, the Core Audio engine, bridging header and NSAudioCaptureUsageDescription removed. Codex's HTML lyric prototypes superseded by the native styles.
+
+2.47 (build 47, 2026-10-03): lyric sync. NowPlayingInfo.elapsedAt records when `elapsed` was true (MediaRemote's kMRMediaRemoteNowPlayingInfoTimestamp; the midpoint of the AppleScript/browser script that read it); NowPlayingController anchors estimatedElapsed on it and moves the anchor only when the stored elapsed changes (resetting it on every equal poll pulled the position back). TeleprompterService uses estimatedElapsed plus a 0.25 s lead instead of its own clock. Lyric styles trimmed to Classic, Poster and Choreography (one-word titles); retired styles decode to Classic. Live theme Pulse (equalizer bars) replaced by Fireworks (rockets, two-ring bursts with gravity and twinkle); ThemeFamily.replaced maps pulse → fireworks.
+
+2.48 (build 48, 2026-10-03): Poster lyric style reserves a column for the words after the headline (the headline scales into the rest; it previously took all the width and crushed them to one letter per line); the lead-in wraps to two lines. QA lyric-styles scope adds poster edge cases.
+
+2.60 (build 60, 2026-10-05): SecureStorage (Secure Enclave-derived AES-GCM for kept history, pins, scripts; legacy plaintext migrates; checked in check-clipboard and in-app with the real enclave), sticker scenes rewritten (particles, broken heart along a jagged crack), Terminal page tab bar (Shell, Today, Usage, GitHub, Servers).
+2.61 (build 61, 2026-10-05): each timer slot has its own tint (`TimerService.tint`: orange, cyan, pink) on its card ring and in the closed notch's times; QA scope timers renders timers-notch.png. StickerLyric lays the sticker beside the poster in an HStack, reserving its whole 1.5× frame (wide symbols overlapped the headline).
+2.62 (build 62, 2026-10-05): the closed notch's timer lane is measured in the rounded font it draws with, per time plus 6pt gaps; each time is fixedSize (the last one wrapped).
+2.63 (build 63, 2026-10-05): fresh-install defaults: starter Home media (large), timer, clock (`NookSettings.starterSizes`); `NotchTab.defaultDock` music, weather, calendar, system, terminal, tray, timers, mirror; installs with saved profiles but no saved dock keep `NotchTab.legacyDock`. InteractionRegressionChecks covers all three. The lyrics bar (TeleprompterBarView, showTeleprompterBar, fittedSize showsLyrics) is removed and the Home Media widget has no lyric line; Settings → Widgets → Dock reorders by dragging a line.3.horizontal handle (`moveDockApp(_:to:)`, QA scope dock-settings); the home sticker lights its doorway and puffs chimney smoke.
+2.64 (build 64, 2026-10-05): 24 more LyricSticker cases (47 total); sticker symbols get a gradient, top highlight and drop shadow; `Globe` draws the world as a lit sphere with projected continents and clouds; coin and diamond spin by scaling (rotation3D vanished edge-on), key turns in plane; Settings sidebar selection has no accent bar.
+2.65 (build 65, 2026-10-05): LRCLIB search adds a title-only stage; score() accepts titles/artists that match after `.toLatin` transliteration within one edit in five (Vtoroi Ka / Второй Ка), checked in InteractionRegressionChecks; censored LRCLIB words (lone dash, stars, f--, [censored]) restored from lyrics.ovh (`uncensor`, checked); 92 stickers (45 simple ones in `LyricSticker.simple` with a Motion and Particles), all in `LyricSticker.color` (no accent), symbols fitted in a square; match() prefers the headline, then strong words, then `weakWords`; Poster puts tails over three words beneath.
+2.66 (build 66, 2026-10-05): agent hook adds PreToolUse and writes <session>.prompt/.tool/.note (first KB) and .count (a byte per step) plus app bundle id and TERM_PROGRAM; existing installs are upgraded on launch (script and hooks rewritten only when different); `AgentHookConfig.field/describe/appName` (check-agent-hooks); closed notch shows the host app icon with a state dot and `notchLabel`; Terminal page gains an Agents tab (QA scope coding uses `AgentActivityMonitor.preview()`); power activity is a gauge plus percentage at the standard lane width.
+2.67 (build 67, 2026-10-05): `ContactNames` (CNContactStore, asked on the first incoming message from a handle; NSContactsUsageDescription and the addressbook entitlement; Contacts row on the Permissions page) names Messages banners and the incoming list; GitHub calendar parses per-day counts from tooltips (`ContributionCalendar.counts`, `stats()`), GitHub tab shows streaks/week/best day/months; Usage tab ranks projects (5) and models (4); paired agent lane allows for its icon; working dot is a fixed blue.
+2.68 (build 68, 2026-10-05): `.worldClock` widget (FeatureID worldClock, medium/large, no page): `WorldClockWidget` draws a 5×7 `DotFont` board in a Canvas on a `FlipSchedule` (every second, quick frames as the minute turns); cities in `WidgetOptions.worldClockCities` (≤5, default LA/NY/London/Dubai/Tokyo), chosen in the inspector; QA scope world-clock. The closed notch shows no agent text: `AgentActivityGlyph` (app icon in a sweeping/pulsing ring) and `AgentActivityPulse` (rippling dots, !, ✓, +N) in `AgentTint` colours at the standard lane width (QA image agent-notch.png in scope coding).
+2.69 (build 69, 2026-10-05): NotchTab `.messages` (`MessagesPage`, the Messages widget's page; demand "messages"): `MessageInboxReader` reads recent chats and one thread read-only from chat.db while the page shows (in memory only); replies go through `MessagesReplyService.quickReply(_:toChat:)`, which verifies the exact chat via Messages scripting (`connect(then:)`) before sending. Message banners carry the chat id and open an inline reply field (`BannerPanel` can become key; `replySize`). Agents in needs-you state post a persistent `.agent` card (withdrawn when they resume) with Go. Answering Claude Code permission prompts from the notch was not built. QA scope messages-inbox.
+2.70 (build 70, 2026-10-05): `.worldClock` removed: saved tiles decode as `.clock` with `widget.clock.style` = dot; the Clock has `WidgetOptions.clockStyle` (regular/dot) and `clockPlaces` (≤5, "local" for here; migrated from the World Clock cities or the old second zone); `DotClock` (DotClock.swift) and a wider Dot tile (320/460). `NookWidgetKind.libraryGroups` lists every widget (checked in InteractionRegressionChecks). Agent pulse uses the vendored ThinkingOrbs (MIT, Sources/Vendor/ThinkingOrbs, credited in Acknowledgements) driven by a periodic timeline via `orbFrozenTime`; `AgentTint` is per agent. QA scope clock.
+2.71 (build 71, 2026-10-05): `LyricSticker.match` scores every word (strong 2, weak 1, +2 for a strong headline; ties to the earliest), then falls back to `NLEmbedding.wordEmbedding(.english)` nearest anchor under cosine distance 0.88 for words of 4+ letters; results cached per line. New `.kid` sticker; family drops kid/baby words; pen drops paper; flower gains bouquet/petals/daisies/tulips. Agent glyph is the plain app icon; the pulse is ThinkingOrbs `.searching` drawn twice through its mask. Checks cover the new cases.
+
+2.59 (build 59, 2026-10-05): restructure step 1–3 start: NookWidgetKind.page, tap-to-expand from Home tiles with an anchored page transition, shared ClipListRow/ClipMenu between clipboard widget, page and popup. Released on its own so v2.58 is the rollback point.
+
+2.58 (build 58, 2026-10-05): lyric styles Stickers/Karaoke/Typewriter (six, two rows), Lyrics drawer, Focus timer Do Not Disturb via named Shortcuts, Settings title bar seam fixed (content under the title bar with a fade), coding column tabs, README screenshots refreshed. QA scopes lyrics-258, timers, coding.
+
+2.57 (build 57, 2026-10-05): Terminal page coding panel (CodingStats: incremental Claude Code/Codex log parsing, Codex rate limits, GitHub public contributions; CodingPanel with agents, today, limits, 14-day chart, top projects/models, contributions, dev servers). Verified on real logs (299 files, 14 s first scan in the background, 0.06 s rescans); QA scope coding with synthetic data.
+
+2.56 (build 56, 2026-10-05): Supaste/Maccy-parity clipboard (OCR text on image clips, @/# query filters, snippets and collections, auto-delete, copy-as case styles, pin keys, drag out, colour picker, pins file, Maccy import with fixture checks), timers back to the original card style (up to three TimerService slots; Focus off the Timers page), paired Bluetooth audio devices in the output menu, converter Under 1 MB tool (verified on a 17 MB image in seven formats) and PDF→TXT removed.
+
+2.55 (build 55, 2026-10-05): Teleprompter (ScriptPrompter, PrompterPanel hidden from capture, VoiceFollower + ScriptAligner with check-prompter in CI), notch banners for Messages and opt-in system notifications (SystemNotificationsReader on usernoted db2, fixture-checked; TypedStreamText decodes attributedBody), Messages widget available, ScreenshotWatcher to Tray with Copy Text, NamedTimers + Focus shortcuts, Luhn/.env credential filter, rounded converter wheel, resizable Settings with a minimum. QA scopes release-255, wheel.
+
+2.54 (build 54, 2026-10-05): competitor-gap batch: meeting countdown live activity (MeetingCountdown), coding-agent live activity (AgentActivityMonitor + activity hook; AgentHookConfig events parameter), audio output menu (AudioOutputs), Tray/basket AirDrop buttons, hide in chosen apps (NotchManager), Calculator and Dev servers widgets (FeatureIDs devServers, calculator). Checks: check-calculator (new, in CI), check-agent-hooks (activity hook coexistence), dev-server scan verified against a live python server; QA scope tools-254.
+
+2.53 (build 53, 2026-10-05): Maccy-parity clipboard: ClipboardPopup (Carbon hot key, default ⇧⌘C; non-activating key panel; keyboard navigation, copy/paste/plain paste via CGEvent ⌘V, number shortcuts, pins, multi-select, preview, app icons, swatches, thumbnails), ClipboardPreferences + Settings → Clipboard (history size, sort, search modes, pins position, pause/ignore next, clear on quit/system clipboard, ClipboardFilter: kinds, apps, patterns, pasteboard types). Entries gain firstDate/copyCount with tolerant decoding. Checks: check-clipboard (search modes incl. mixed fallback, sorting, pins, limits, legacy decoding, filters); QA scopes clipboard-popup and clipboard-popup-live (real panel focus and keys).
+
+2.52 (build 52, 2026-10-04): TeleprompterService.rest is empty, so timed intros and instrumental breaks clear the lyric (the ♪ glyph, which Poster set as a giant headline on either side, is gone).
+
+2.51 (build 51, 2026-10-04): Tray page basket chips (TrayPageView; shared per-basket ShelfStore via BasketWindowController.store(for:)); basket fold restores the saved circle origin (origins validated against the full screen frame, so spots beside the Dock survive); Remove Basket submenu names each basket; Poster scanlines removed. QA: basket scope adds tray-page-baskets.png.
+
+2.50 (build 50, 2026-10-04): Paste queue in ClipboardMonitor (PasteQueue model: in order/newest first, 50 clips, dedupe; global+local ⌘V key monitors gated by AXIsProcessTrusted, prompt only on enable; next clip written 0.2 s after paste; closed-Nook count via PasteQueueState; Accessibility row in Permissions; clipboard service demanded while on). ClipboardSecrets credential filter. LRCLIB scoring rejects other songs, weights recording length for timed lyrics, free-text retry; parseLRC rests and offsets; intro rest. Converter wheel hit-test fixed (flipped hosting view mirrored vertically). Basket removal. Fixed-size Settings window. Checks: check-clipboard (queue, secrets), InteractionRegressionChecks (lyric scoring, LRC, wheel segments); QA scope clipboard-queue.
+
+2.49 (build 49, 2026-10-04): File Converter (Sources/Modules/Converter): Shift-drag wheel of formats, Option-Shift tools; ConverterWheel watches global mouse drags and the drag pasteboard (no permission), FileConverter uses ImageIO/PDFKit/AVFoundation/NSAttributedString/ditto/zip and offers only writable formats; ConverterJobs progress cards; AppSettings.fileConverterEnabled (default on); MACSPACES_QA_SCOPE=converter ran 60 actions on samples (all valid). Menu: Nook, File Converter, File Baskets | Settings | Check for Updates | Quit, no ellipses; Nook Profile picker removed. File baskets as draggable frosted circles that open into panels, positions and open state persisted. Poster lyric style rotates three compositions per line. Open Nook closes when Mission Control appears. Website demo renderer: clips (Music Player, Themes, Tray, Terminal, Timers), longer notch video, synthetic weather everywhere.

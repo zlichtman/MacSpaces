@@ -5,8 +5,13 @@ options:
   xcodeVersion: "15.0"
   bundleIdPrefix: dev.opensource
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "15.0"
   createIntermediateGroups: true
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.20.0
 
 targets:
   MacSpaces:
@@ -14,40 +19,43 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+        excludes:
+          - "Vendor/**/README.md"
+          - "Vendor/**/LICENSE"
+    dependencies:
+      - package: SwiftTerm
     info:
       path: Sources/Resources/Info.plist
       properties:
         CFBundleName: MacSpaces
         CFBundleDisplayName: MacSpaces
-        CFBundleShortVersionString: "1.14"
-        CFBundleVersion: "14"
-        LSMinimumSystemVersion: "13.0"
+        CFBundleShortVersionString: "2.71"
+        CFBundleVersion: "71"
+        LSMinimumSystemVersion: "15.0"
         LSUIElement: true
         LSMultipleInstancesProhibited: true
+        NSMicrophoneUsageDescription: MacSpaces listens only while the teleprompter follows your voice, to keep your script in step with what you say. Audio stays on your Mac.
+        NSSpeechRecognitionUsageDescription: The teleprompter recognises your speech on your Mac to scroll your script as you read it.
         NSCameraUsageDescription: MacSpaces uses the camera for the notch Mirror tab so you can quickly check yourself before a call.
         NSCameraUseContinuityCameraDeviceType: true
-        NSMicrophoneUsageDescription: MacSpaces records audio for the Voice Memo widget. Recordings stay in your Documents folder.
-        NSAudioCaptureUsageDescription: MacSpaces captures audio only from apps you choose in the Audio Controls mixer so it can apply that app's saved volume or mute setting.
         NSCalendarsUsageDescription: MacSpaces shows today's events in the Calendar widget.
         NSCalendarsFullAccessUsageDescription: MacSpaces shows today's events in the Calendar widget.
         NSRemindersUsageDescription: MacSpaces shows and completes reminders in the Todos widget.
         NSRemindersFullAccessUsageDescription: MacSpaces shows and completes reminders in the Todos widget.
         NSLocationWhenInUseUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
         NSLocationUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
-        NSBluetoothAlwaysUsageDescription: MacSpaces reads connection changes for your already-paired Bluetooth devices to show brief notch live activities. It does not scan for or track nearby devices.
-        NSAppleEventsUsageDescription: MacSpaces uses AppleScript for quick actions, unread counts, and media metadata from Music, Spotify, or your active browser when system-wide media info is unavailable.
-        NSDesktopFolderUsageDescription: MacSpaces reads your Desktop to list recent screenshots in the Screenshots widget.
-        NSDownloadsFolderUsageDescription: MacSpaces reads your Downloads folder to list recent files in the Downloads widget.
-        NSDocumentsFolderUsageDescription: MacSpaces saves Voice Memo recordings to your Documents folder.
+        NSBluetoothAlwaysUsageDescription: MacSpaces reads your already-paired Bluetooth devices to show their battery levels in the Battery widget. It does not scan for or track nearby devices.
+        NSAppleEventsUsageDescription: MacSpaces uses AppleScript for explicitly requested Messages replies, quick actions, unread counts, and media metadata from Music, Spotify, or your active browser when system-wide media info is unavailable.
         NSHumanReadableCopyright: MIT licensed open-source software.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces
+        ARCHS: "arm64 x86_64"
         SWIFT_VERSION: "5.9"
-        SWIFT_OBJC_BRIDGING_HEADER: Sources/Support/MacSpaces-Bridging-Header.h
         ENABLE_HARDENED_RUNTIME: true
         CODE_SIGN_ENTITLEMENTS: Sources/Resources/MacSpaces.entitlements
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
         GENERATE_INFOPLIST_FILE: false
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
