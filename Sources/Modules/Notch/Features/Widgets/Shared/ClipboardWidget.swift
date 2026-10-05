@@ -2,54 +2,65 @@ import SwiftUI
 
 struct ClipboardWidget: View {
     @ObservedObject var monitor: ClipboardMonitor
+    var compact = false
     @State private var showingHistory = false
     @State private var query = ""
     @State private var favoritesOnly = false
     @State private var message: String?
 
     var body: some View {
-        Button {
-            showingHistory.toggle()
-        } label: {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $showingHistory, arrowEdge: .top) {
-            historyList
-        }
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .popover(isPresented: $showingHistory, arrowEdge: .top) {
+                historyList
+            }
     }
 
     @ViewBuilder
     private var content: some View {
-        if let latest = monitor.entries.first {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 9))
-                    Text("CLIPBOARD · \(monitor.entries.count)")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .foregroundStyle(.secondary)
-
-                Text(latest.preview)
-                    .font(.system(size: 10))
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        if monitor.entries.isEmpty {
+            WidgetEmptyState(systemImage: "doc.on.clipboard", caption: "Copied text and links appear here", captionSize: 10)
+                .padding(.horizontal, 10)
+        } else if compact, let latest = monitor.entries.first {
+            HStack(spacing: 6) {
+                clipRow(latest, lines: 2)
+                historyButton
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
         } else {
-            VStack(spacing: 4) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.secondary)
-                Text("Copy something to build history")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(monitor.entries.prefix(3)) { entry in
+                    clipRow(entry, lines: 1)
+                }
+                Spacer(minLength: 0)
+                HStack {
+                    Text(monitor.queueEnabled
+                         ? (monitor.queueNeedsAccess ? "Queue needs Accessibility" : "\(monitor.queue.count) to paste")
+                         : "\(monitor.entries.count) clip\(monitor.entries.count == 1 ? "" : "s")")
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { monitor.setQueueEnabled(!monitor.queueEnabled) } label: { Image(systemName: "list.number") }
+                        .buttonStyle(WidgetChipStyle(prominent: monitor.queueEnabled, height: 20))
+                        .help("Paste queue: copy several clips, then each ⌘V pastes the next")
+                        .accessibilityLabel(monitor.queueEnabled ? "Turn off paste queue" : "Turn on paste queue")
+                    Button("All") { showingHistory = true }
+                        .buttonStyle(WidgetChipStyle(height: 20))
+                        .help("Search clipboard history")
+                }
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
         }
+    }
+
+    private var historyButton: some View {
+        Button { showingHistory = true } label: { Image(systemName: "list.bullet") }
+            .buttonStyle(WidgetChipStyle(height: 22))
+            .help("Search clipboard history")
+    }
+
+    private func clipRow(_ entry: ClipboardEntry, lines: Int) -> some View {
+        ClipListRow(entry: entry, monitor: monitor, lines: lines)
     }
 
     private var historyList: some View {
@@ -70,6 +81,10 @@ struct ClipboardWidget: View {
                 .accessibilityIdentifier("clipboard.search")
             Toggle("Favorites only", isOn: $favoritesOnly)
                 .toggleStyle(.checkbox)
+            Toggle("Keep history after quitting", isOn: Binding(get: { monitor.persistenceEnabled }, set: { monitor.setPersistence($0) }))
+                .toggleStyle(.checkbox)
+            Text("Stored locally when enabled. Turning this off removes saved history from disk.").font(.caption2).foregroundStyle(.secondary)
+            if let error = monitor.storageError { Text(error).font(.caption2).foregroundStyle(.red) }
             let matches = monitor.matching(query, favoritesOnly: favoritesOnly)
             if matches.isEmpty {
                 Text(monitor.entries.isEmpty ? "Copy text to start your history." : "No matching clips.")

@@ -1,13 +1,17 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.64
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.64** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.64:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **Twice the stickers.** 24 new animated stickers for the Stickers lyric style: lightning, wind, sleep, coffee, drinks, birds, cats, dogs, crowns, keys, running, mountains, cameras, bells, gifts, balloons, diamonds, trophies, ideas, smiles, rainbows, boats, confetti and tornadoes.
+- **Stickers with depth.** Every sticker is lit from above with a soft shadow, and the world is now a spinning 3D globe with turning continents, drifting clouds and an atmosphere.
+- **A cleaner Settings sidebar.** The selected page is just highlighted, without the extra line beside it.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in 2.63:
+
+- **A better first Nook.** New installs start with Music at full size, a timer and the clock on Home, and a dock of Music, Weather, Calendar, System, Terminal, Tray, Timers and Mirror. Existing setups are unchanged; Reset in Settings gives the new layout.
+- **No more lyrics bar.** The lyrics bar under Home is gone, and the Home music widget no longer shows lyrics: the Music page is the place for them.
+- **Drag to reorder the dock.** In Settings → Widgets → Dock, drag a page by its handle instead of nudging it up and down.
+- **A cosier house.** The home sticker glows warm through the doorway, flickering like a fire inside, with smoke puffing from the chimney.
