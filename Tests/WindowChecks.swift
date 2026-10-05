@@ -28,6 +28,16 @@ import SwiftUI
             RunLoop.main.run(until: Date().addingTimeInterval(0.001))
             precondition(panel.frame == frame, "SwiftUI content must not resize the host window")
         }
+        let cutoutHost = NotchHostingView(rootView: Color.red,
+            interactiveSize: { CGSize(width: 800, height: 300) },
+            topCameraClearance: { CGSize(width: 185, height: 32) },
+            fileDragActivationSize: { .zero }, fileDragEntered: {}, fileDragExited: {}, fileURLsDropped: { _ in false })
+        panel.contentView = cutoutHost
+        cutoutHost.frame = NSRect(origin: .zero, size: frame.size)
+        cutoutHost.layoutSubtreeIfNeeded()
+        precondition(cutoutHost.hitTest(NSPoint(x: 100, y: 290)) == nil, "Left toolbar shoulder must pass through")
+        precondition(cutoutHost.hitTest(NSPoint(x: 700, y: 290)) == nil, "Right toolbar shoulder must pass through")
+        precondition(cutoutHost.hitTest(NSPoint(x: 400, y: 150)) != nil, "Panel content must remain interactive")
         panel.close()
         print("Nook window checks passed: stationary desktop policy, Spaces, full screen, focus, geometry and 120 content-size transitions")
     }

@@ -1,13 +1,12 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.49
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.49** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.49:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
-
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+- **File Converter.** Hold Shift while dragging a file and a wheel of formats appears around your pointer; drop on one and the converted copy is saved beside the original. Hold Option and Shift for tools instead: compress, remove metadata, resize, extract audio, make a GIF or a snapshot, split or merge PDFs, zip and unzip. Images, PDFs, documents, video and audio are covered, several files can go at once, and nothing leaves your Mac. Turn it on or off from the menu bar or General settings.
+- **File baskets are little circles.** Park one beside the Dock, drop files on it, and click to open it into a panel. Baskets you leave out come back where they were.
+- **Poster lyrics change it up.** The Poster style takes a different layout for each line, so two lines in a row never look the same.
+- **Mission Control closes the Nook.** An open Nook now steps aside when Mission Control appears.
+- **A simpler menu.** Nook, File Converter, File Baskets, Settings, Check for Updates and Quit. Switch Home profiles from their buttons in the Nook's dock.

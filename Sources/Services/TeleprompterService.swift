@@ -82,9 +82,11 @@ final class TeleprompterService: ObservableObject {
     private let nowPlaying: NowPlayingController
     private var cancellable: AnyCancellable?
     private var timer: Timer?
+    private var visiblePresentations: Set<UUID> = []
     private var dataTask: URLSessionDataTask?
     private var currentInfo = NowPlayingInfo()
-    private var infoReceivedAt = Date()
+    /// How far ahead of the playhead a lyric line switches.
+    static let leadTime: TimeInterval = 0.25
     private var loadedKey = ""
     private var lines: [TimedLine] = []
     private var directSubtitle = ""
@@ -101,14 +103,24 @@ final class TeleprompterService: ObservableObject {
                 self?.consume(info)
             }
 
+        consume(nowPlaying.info)
+    }
+
+    func setPresentationVisible(_ visible: Bool, id: UUID) {
+        if visible { visiblePresentations.insert(id) } else { visiblePresentations.remove(id) }
+        if cancellable != nil && !visiblePresentations.isEmpty { consume(nowPlaying.info) }
+        reconcileTimer()
+    }
+
+    private func reconcileTimer() {
+        let needed = cancellable != nil && !visiblePresentations.isEmpty && currentInfo.isPlaying
+        if !needed { timer?.invalidate(); timer = nil; return }
+        guard timer == nil else { return }
         let updateTimer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateCurrentLine()
-            }
+            Task { @MainActor [weak self] in self?.updateCurrentLine() }
         }
         RunLoop.main.add(updateTimer, forMode: .common)
         timer = updateTimer
-        consume(nowPlaying.info)
     }
 
     func stop() {
@@ -143,7 +155,8 @@ final class TeleprompterService: ObservableObject {
 
     private func consume(_ info: NowPlayingInfo) {
         currentInfo = info
-        infoReceivedAt = Date()
+        reconcileTimer()
+        guard !visiblePresentations.isEmpty else { return }
         directSubtitle = info.subtitleText
         let key = trackKey(for: info)
 
@@ -386,8 +399,9 @@ final class TeleprompterService: ObservableObject {
             return
         }
 
-        let elapsed = currentInfo.elapsed
-            + (currentInfo.isPlaying ? Date().timeIntervalSince(infoReceivedAt) : 0)
+        // The same position as the progress bar, a beat early: a line that appears
+        // as it's sung reads as late once the 0.2 s tick and the fade are added.
+        let elapsed = nowPlaying.estimatedElapsed(at: Date()) + Self.leadTime
         let index = lines.lastIndex(where: { $0.start <= elapsed }) ?? 0
         currentText = lines[index].text
         upcomingText = index + 1 < lines.count ? lines[index + 1].text : ""
