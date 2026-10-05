@@ -59,7 +59,11 @@ final class NotchManager {
         Publishers.MergeMany([
             powerMonitor.objectWillChange,
             nowPlaying.objectWillChange, timerService.objectWillChange,
-            systemActivityMonitor.objectWillChange,
+            systemActivityMonitor.objectWillChange, MessageActivityState.shared.objectWillChange,
+            PasteQueueState.shared.objectWillChange, MeetingCountdown.shared.objectWillChange,
+            ScreenshotWatcher.shared.objectWillChange,
+            AppServices.shared.extraTimers[0].objectWillChange, AppServices.shared.extraTimers[1].objectWillChange,
+            AgentActivityMonitor.shared.objectWillChange,
         ])
         .debounce(for: .milliseconds(20), scheduler: DispatchQueue.main)
         .sink { [weak self] _ in
@@ -67,6 +71,22 @@ final class NotchManager {
             self?.updateWindowFrames()
         }
         .store(in: &cancellables)
+
+        // New screenshots join the Tray (when turned on) and show beside the notch.
+        ScreenshotWatcher.shared.onCapture = { [weak self] url in self?.shelf.add(url: url) }
+        ScreenshotWatcher.shared.start()
+
+        // In front of apps the user chose (games, presentations), the Nook steps away.
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyHiddenApps() }
+            .store(in: &cancellables)
+        settings.$hiddenInApps
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyHiddenApps() } }
+            .store(in: &cancellables)
 
         settings.objectWillChange
             .debounce(for: .milliseconds(40), scheduler: DispatchQueue.main)
@@ -81,7 +101,7 @@ final class NotchManager {
     func stop() {
         settings.cancelInteractiveReorder()
         cancellables.removeAll()
-        entries.forEach { $0.window.close() }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.close() }
         entries.removeAll()
         isDisplayTransitionActive = false
     }
@@ -95,12 +115,12 @@ final class NotchManager {
         guard !isDisplayTransitionActive else { return }
         isDisplayTransitionActive = true
         settings.cancelInteractiveReorder()
-        entries.forEach { $0.window.orderOut(nil) }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.orderOut(nil) }
     }
 
     private func rebuildWindows() {
         settings.cancelInteractiveReorder()
-        entries.forEach { $0.window.close() }
+        entries.forEach { $0.viewModel.endAppPresentation(); $0.window.close() }
         entries.removeAll()
 
         let screens = DisplayTargeting.screens(
@@ -113,6 +133,7 @@ final class NotchManager {
             entries.append(makeWindow(for: screen))
         }
         isDisplayTransitionActive = false
+        if isHiddenForApp { entries.forEach { $0.window.orderOut(nil) } }
     }
 
     private func makeWindow(for screen: NSScreen) -> Entry {
@@ -131,6 +152,7 @@ final class NotchManager {
         let frame = windowFrame(for: viewModel, on: screen)
 
         let window = NotchWindow(contentRect: frame)
+        window.owner = viewModel
         let root = NotchContainerView(viewModel: viewModel)
         window.contentView = NotchHostingView(
             rootView: root,
@@ -139,6 +161,10 @@ final class NotchManager {
                 return viewModel.state == .expanded
                     ? viewModel.expandedSize
                     : viewModel.collapsedSize
+            },
+            topCameraClearance: { [weak viewModel] in
+                guard let viewModel, viewModel.state == .expanded, viewModel.geometry.isHardwareNotch else { return .zero }
+                return CGSize(width: viewModel.geometry.width, height: viewModel.geometry.height)
             },
             fileDragActivationSize: { [weak viewModel] in
                 guard let viewModel else { return .zero }
@@ -169,7 +195,34 @@ final class NotchManager {
         )
         window.setFrame(frame, display: true)
         window.orderFrontRegardless()
+        // A closed Nook must not keep the keyboard (the Terminal and Notes take
+        // it). Reordering hands key status back to the active app's window.
+        viewModel.$state.removeDuplicates().dropFirst()
+            .sink { [weak window] state in
+                guard state == .collapsed, let window, window.isKeyWindow else { return }
+                window.makeFirstResponder(nil)
+                window.orderOut(nil)
+                window.orderFrontRegardless()
+            }
+            .store(in: &cancellables)
         return Entry(window: window, viewModel: viewModel, screen: screen)
+    }
+
+    private var isHiddenForApp = false
+
+    private func applyHiddenApps() {
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        let hide = !front.isEmpty && settings.hiddenInApps.contains(front)
+        guard hide != isHiddenForApp, !isDisplayTransitionActive else { return }
+        isHiddenForApp = hide
+        for entry in entries {
+            if hide {
+                entry.viewModel.state = .collapsed
+                entry.window.orderOut(nil)
+            } else {
+                entry.window.orderFrontRegardless()
+            }
+        }
     }
 
     private func updateWindowFrames() {
@@ -182,8 +235,15 @@ final class NotchManager {
     }
 
     private func windowFrame(for viewModel: NotchViewModel, on screen: NSScreen) -> NSRect {
-        let surfaceWidth = max(viewModel.expandedSize.width, viewModel.collapsedSize.width)
-        let surfaceHeight = max(viewModel.expandedSize.height, viewModel.collapsedSize.height)
+        // Reserve every app page so navigation never clips a larger page or
+        // moves the host window while the user is interacting with the dock.
+        let pageSizes = NotchTab.allCases.map {
+            NotchViewModel.fittedSize(widgets: settings.widgets, tab: $0,
+                geometry: viewModel.geometry, availableWidth: screen.frame.width,
+                sizes: settings.widgetSizes)
+        }
+        let surfaceWidth = max(pageSizes.map(\.width).max() ?? 0, viewModel.collapsedSize.width)
+        let surfaceHeight = max(pageSizes.map(\.height).max() ?? 0, viewModel.collapsedSize.height)
         let width = surfaceWidth + 52
         let height = surfaceHeight + 38
         return NSRect(
