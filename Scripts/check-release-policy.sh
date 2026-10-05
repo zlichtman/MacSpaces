@@ -10,9 +10,13 @@ for key in ['CFBundleShortVersionString', 'CFBundleVersion']:
     match = re.search(rf'^\s*{key}: "([^"]+)"$', spec, re.M)
     assert match and match[1] == info[key], f'{key} differs between project.yml and Info.plist'
 version = info['CFBundleShortVersionString']
-assert re.fullmatch(r'[0-9]{1,4}(\.[0-9]{1,4}){0,2}', version), 'The public version must look like 1.0.0 or 2.0.0'
 build = info['CFBundleVersion']
 assert build.isascii() and build.isdigit() and int(build) > 0, 'The internal build must be a positive integer'
+# From 2.x on, the public version is major.build (2.32), so one number tells
+# people exactly which installer they have. 1.0.0 predates the scheme.
+if version != '1.0.0':
+    assert re.fullmatch(r'[0-9]{1,3}\.[0-9]{1,5}', version), 'The public version must look like 2.32'
+    assert version.split('.')[1] == build, f'The public version must end in the build ({version.split(".")[0]}.{build})'
 notes = Path('RELEASE_NOTES.md').read_text()
 assert f'**{version}**' in notes, 'RELEASE_NOTES.md must name the current version'
 print(f'Release policy passed: public version {version}, internal build {build}')
