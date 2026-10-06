@@ -34,7 +34,16 @@ final class ShortcutsService: ObservableObject {
         refresh()
     }
 
+#if DEBUG
+    /// Website captures: synthetic Shortcut names; the real list is never read.
+    private var previewNames: [String]?
+    func setPreview(_ names: [String]) { previewNames = names; self.names = names; started = true }
+#endif
+
     func refresh() {
+#if DEBUG
+        if let previewNames { names = previewNames; return }
+#endif
         isLoading = true
         Self.execute(arguments: ["list"]) { [weak self] status, output in
             guard let self else { return }

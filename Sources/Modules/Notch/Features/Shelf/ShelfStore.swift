@@ -65,14 +65,25 @@ final class ShelfStore: ObservableObject {
         }
     }
 
-    private static var persistenceURL: URL {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MacSpaces", isDirectory: true)
+    private let basketID: UUID?
+    private var persistenceURL: URL {
+        let root = Bundle.main.bundleIdentifier == "dev.opensource.MacSpaces"
+            ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            : FileManager.default.temporaryDirectory.appendingPathComponent("MacSpacesFixtures/" + (Bundle.main.bundleIdentifier ?? "tests"))
+        let directory = root.appendingPathComponent("MacSpaces", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory.appendingPathComponent("tray.json")
+        return directory.appendingPathComponent(basketID.map { "basket-" + $0.uuidString + ".json" } ?? "tray.json")
     }
 
-    init() {
+    /// Deletes a removed basket's saved list. It holds references only, so the
+    /// files themselves are untouched.
+    func forgetSavedList() {
+        guard basketID != nil else { return }
+        try? FileManager.default.removeItem(at: persistenceURL)
+    }
+
+    init(basketID: UUID? = nil) {
+        self.basketID = basketID
         load()
         items.forEach(requestThumbnail(for:))
     }
@@ -207,6 +218,7 @@ final class ShelfStore: ObservableObject {
     /// Local visual-QA data that never touches the persisted user shelf.
     func setPreviewItems(_ urls: [URL], selectedIndex: Int? = nil) {
         items = urls.map { ShelfItem(url: $0) }
+        items.forEach(requestThumbnail)
         if let selectedIndex, items.indices.contains(selectedIndex) {
             selectedItemID = items[selectedIndex].id
         } else {
@@ -231,6 +243,23 @@ final class ShelfStore: ObservableObject {
     func airDrop(_ item: ShelfItem) {
         guard let service = NSSharingService(named: .sendViaAirDrop) else { return }
         service.perform(withItems: [item.url])
+    }
+
+    /// Recognises the text in an image or PDF (on this Mac) and copies it.
+    func copyText(_ item: ShelfItem) {
+        let url = item.url
+        Task {
+            guard let data = try? await LocalFileTools.process(url, operation: .extractText),
+                  let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+    }
+
+    /// Every file here in one AirDrop.
+    func airDropAll() {
+        guard !items.isEmpty, let service = NSSharingService(named: .sendViaAirDrop) else { return }
+        service.perform(withItems: items.map(\.url))
     }
 
     /// Puts the file itself on the pasteboard so it pastes into Finder,
@@ -309,7 +338,7 @@ final class ShelfStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: Self.persistenceURL),
+        guard let data = try? Data(contentsOf: persistenceURL),
               let decoded = try? JSONDecoder().decode([DecodableItem].self, from: data) else {
             return
         }
@@ -349,6 +378,6 @@ final class ShelfStore: ObservableObject {
             )
         }
         guard let data = try? JSONEncoder().encode(persisted) else { return }
-        try? data.write(to: Self.persistenceURL, options: .atomic)
+        try? data.write(to: persistenceURL, options: .atomic)
     }
 }
