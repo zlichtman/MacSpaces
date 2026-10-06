@@ -1,13 +1,18 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.73
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.73** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.73:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **Reactions where they belong.** Hearts, thumbs, laughs and any emoji reactions now sit on the message they're for, instead of showing up as separate "Reacted 😂 to …" messages. Taking a reaction back removes it.
+- **Photos and files.** Pictures in a conversation show inline (click one to open it full size), and other attachments show as a file you can open.
+- **Hide or delete a conversation.** Right-click a conversation: Open in Messages, Hide from MacSpaces (it comes back when something new arrives), or Delete in Messages, which opens the conversation in Messages and asks there, so nothing is deleted without your confirmation.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in 2.72:
+
+- **Themes, regrouped.** Sixty themes in eight groups: Core, Terminal, and six groups of moving scenes, Bloom, Forest, Earth, Water, Sky and Tech.
+- **New and redrawn scenes.** A cherry branch with petals that flutter as they fall, a lavender field leaning in the wind with bees over it, sunflowers with nodding heads, a wildflower meadow with butterflies, lotus flowers opening on a pond, fern fronds reaching in from the corners, a moon rising over pines, red-rock canyons with heat shimmer, snow falling in depth, and glacier ice with light sweeping across it.
+- **Calmer effects.** The rainbow keyboard, synthwave grid, plasma, code rain, warp, circuits, prisms and lava all move more slowly.
+- **Terminal, tidied.** Ruby, Citrine, Sapphire and Indigo replace Dracula, Tomorrow Night, Kanagawa and Night Owl, which looked too alike, and Glass is a clear cyan. Fireworks, Coral and Sandbar are retired. A theme that was retired opens as its closest replacement.
+- **Photos in Messages.** New messages under the notch and the Messages inbox show your contacts' photos.

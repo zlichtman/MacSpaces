@@ -1,4 +1,5 @@
 import Foundation
+import Carbon
 
 /// Single serial executor for every `NSAppleScript` in the app.
 ///
@@ -27,6 +28,33 @@ enum AppleScriptRunner {
                 .executeAndReturnError(&error)
             let result = Result(descriptor: descriptor, failed: descriptor == nil || error != nil)
             guard let completion else { return }
+            Task { @MainActor in completion(result) }
+        }
+    }
+
+    enum Argument: Sendable { case text(String), strings([String]) }
+    static func runHandler(_ source: String, name: String, arguments: [Argument],
+                           completion: @escaping @Sendable @MainActor (Result) -> Void) {
+        queue.async {
+            var error: NSDictionary?
+            let script = NSAppleScript(source: source)
+            let event = NSAppleEventDescriptor(eventClass: AEEventClass(kASAppleScriptSuite), eventID: AEEventID(kASSubroutineEvent),
+                targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+            event.setParam(NSAppleEventDescriptor(string: name), forKeyword: AEKeyword(keyASSubroutineName))
+            let parameters = NSAppleEventDescriptor.list()
+            for (index, argument) in arguments.enumerated() {
+                let descriptor: NSAppleEventDescriptor
+                switch argument {
+                case .text(let text): descriptor = NSAppleEventDescriptor(string: text)
+                case .strings(let strings):
+                    descriptor = .list()
+                    for (i, text) in strings.enumerated() { descriptor.insert(NSAppleEventDescriptor(string: text), at: i + 1) }
+                }
+                parameters.insert(descriptor, at: index + 1)
+            }
+            event.setParam(parameters, forKeyword: AEKeyword(keyDirectObject))
+            let value = script?.executeAppleEvent(event, error: &error)
+            let result = Result(descriptor: value, failed: value == nil || error != nil)
             Task { @MainActor in completion(result) }
         }
     }

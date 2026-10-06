@@ -29,3 +29,6 @@ Releases/
 .env
 .env.*
 !.env.example
+
+# Local demo clips (real songs, lyrics or artwork): never committed
+Demos/stash/
