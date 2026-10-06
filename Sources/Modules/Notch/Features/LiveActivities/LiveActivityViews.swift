@@ -132,42 +132,43 @@ struct MusicActivityArtworkView: View {
     }
 }
 
+/// The battery beside the notch: just the gauge on one side and the level on the
+/// other, in the same colour (green while charging, orange when low), so the
+/// notch grows no wider than any other activity.
 struct PowerActivityIconView: View {
     @ObservedObject var monitor: PowerSourceMonitor
     @ObservedObject private var theme = ThemeStore.shared
     var compact = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 5) {
             BatteryGaugeView(level: monitor.hasReading ? monitor.batteryLevel : nil,
-                charging: monitor.isCharging,
-                tint: monitor.isLowBatteryActivity ? .orange : theme.notch.accent, width: 30)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(compact ? "\(monitor.batteryLevel)%" : "Mac battery")
-                    .font(.system(size: 11, weight: .semibold)).monospacedDigit()
-                if compact {
-                    Text(monitor.isLowBatteryActivity ? "Low battery" : monitor.statusLabel)
-                        .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-                }
+                             charging: monitor.isCharging, tint: PowerActivityLabelView.tint(monitor, accent: theme.notch.accent),
+                             width: 24)
+            if compact {
+                Text("\(monitor.batteryLevel)%")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(PowerActivityLabelView.tint(monitor, accent: theme.notch.accent))
             }
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(monitor.activityLabel)
     }
 }
 
 struct PowerActivityLabelView: View {
     @ObservedObject var monitor: PowerSourceMonitor
+    @ObservedObject private var theme = ThemeStore.shared
+
+    static func tint(_ monitor: PowerSourceMonitor, accent: Color) -> Color {
+        monitor.isLowBatteryActivity ? .orange : monitor.isCharging ? .green : accent
+    }
+
     var body: some View {
-        VStack(spacing: 1) {
-            Text("\(monitor.batteryLevel)%")
-                .font(.system(size: 13, weight: .semibold)).monospacedDigit()
-                .foregroundStyle(monitor.isLowBatteryActivity ? Color.orange : .primary)
-            Text(monitor.isLowBatteryActivity ? "Low battery" : monitor.statusLabel)
-                .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-        }
-        .lineLimit(1).frame(maxWidth: .infinity)
-        .accessibilityLabel(monitor.activityLabel)
+        Text("\(monitor.batteryLevel)%")
+            .font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+            .foregroundStyle(Self.tint(monitor, accent: theme.notch.accent))
+            .lineLimit(1).fixedSize()
+            .accessibilityLabel(monitor.activityLabel)
     }
 }

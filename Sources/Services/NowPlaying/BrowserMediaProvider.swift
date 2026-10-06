@@ -87,7 +87,9 @@ final class BrowserMediaProvider: NowPlayingProvider {
                     \(browser.scriptBody)
                 end tell
                 """
+                let started = Date()
                 let scriptResult = AppleScriptRunner.runSynchronously(source)
+                let readAt = started.addingTimeInterval(Date().timeIntervalSince(started) / 2)
                 let result = scriptResult.descriptor?.stringValue ?? ""
                 let parts = result.components(separatedBy: "<<<MACSPACES>>>")
                 guard parts.count >= 2,
@@ -97,19 +99,22 @@ final class BrowserMediaProvider: NowPlayingProvider {
                 }
 
                 var info = NowPlayingInfo()
+                info.sourceName = browser.appName
+                info.sourceBundleID = browser.bundleID
                 info.title = Self.cleanTitle(parts[0], for: url)
                 info.artist = Self.sourceLabel(for: url, browserName: browser.appName)
                 info.sourceURL = url
-                // A supported active tab is the best public signal browsers expose
-                // without requiring Accessibility or JavaScript-from-Apple-Events.
-                // Transport commands still go through MediaRemote.
-                info.isPlaying = true
+                // A tab title does not prove active playback or ownership of
+                // the system transport. Offer Open in Browser, not commands
+                // that could accidentally control a different application.
+                info.isPlaying = false
                 if parts.count > 2 {
                     let playback = parts[2].components(separatedBy: "|||")
                     if playback.count >= 3 {
                         info.isPlaying = playback[0] == "playing"
                         info.duration = Double(playback[1]) ?? 0
                         info.elapsed = Double(playback[2]) ?? 0
+                        info.elapsedAt = readAt
                         if playback.count > 3 {
                             info.subtitleText = playback[3]
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -131,8 +136,8 @@ final class BrowserMediaProvider: NowPlayingProvider {
         }
     }
 
-    func send(_ command: NowPlayingCommand) {
-        transport.send(command)
+    func send(_ command: NowPlayingCommand, completion: @escaping (Result<Void, PlaybackCommandError>) -> Void) {
+        completion(.failure(.unavailable))
     }
 
     private func activeBrowsers() -> [Browser] {
