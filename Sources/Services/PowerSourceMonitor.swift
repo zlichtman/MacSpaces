@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 import IOKit.ps
 import Combine
 @preconcurrency import UserNotifications
@@ -29,6 +30,43 @@ struct MacPowerSnapshot: Equatable {
     }
 }
 
+/// Longer-term battery facts from the AppleSmartBattery service and the power
+/// source list. Any value macOS doesn't report stays nil (shown as unknown).
+struct BatteryDetails: Equatable {
+    var cycleCount: Int?
+    /// Current full-charge capacity as a percentage of the design capacity.
+    var healthPercent: Int?
+    var minutesToEmpty: Int?
+    var minutesToFull: Int?
+    var adapterName: String?
+    var adapterWatts: Int?
+
+    static func read(powerSource description: [String: Any]?) -> Self {
+        var details = Self()
+        if let empty = description?[kIOPSTimeToEmptyKey] as? Int, empty > 0 { details.minutesToEmpty = empty }
+        if let full = description?[kIOPSTimeToFullChargeKey] as? Int, full > 0 { details.minutesToFull = full }
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
+        guard service != 0 else { return details }
+        defer { IOObjectRelease(service) }
+        var unmanaged: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &unmanaged, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+              let properties = unmanaged?.takeRetainedValue() as? [String: Any] else { return details }
+        let batteryData = properties["BatteryData"] as? [String: Any] ?? [:]
+        func int(_ key: String) -> Int? { (properties[key] as? Int) ?? (batteryData[key] as? Int) }
+        details.cycleCount = int("CycleCount")
+        if let design = int("DesignCapacity"), design > 0,
+           let full = int("NominalChargeCapacity") ?? int("AppleRawMaxCapacity") {
+            details.healthPercent = min(100, Int((Double(full) / Double(design) * 100).rounded()))
+        }
+        if let adapter = properties["AdapterDetails"] as? [String: Any],
+           properties["ExternalConnected"] as? Bool == true {
+            details.adapterName = adapter["Name"] as? String
+            details.adapterWatts = (adapter["Watts"] as? Int).flatMap { $0 > 0 ? $0 : nil }
+        }
+        return details
+    }
+}
+
 /// Watches the battery via IOKit power sources and briefly surfaces changes
 /// (plug in / unplug) as a live activity beside the notch.
 @MainActor
@@ -38,6 +76,7 @@ final class PowerSourceMonitor: ObservableObject {
     @Published private(set) var hasBattery = false
     @Published private(set) var hasReading = false
     @Published private(set) var isOnExternalPower = false
+    @Published private(set) var details = BatteryDetails()
 
     var statusLabel: String {
         guard hasReading else { return "Battery unavailable" }
@@ -99,6 +138,9 @@ final class PowerSourceMonitor: ObservableObject {
             hasReading = !hasBattery
             return
         }
+        let internalBattery = descriptions.first { $0[kIOPSTypeKey] as? String == kIOPSInternalBatteryType }
+        let newDetails = BatteryDetails.read(powerSource: internalBattery)
+        if newDetails != details { details = newDetails }
         let wasExternal = isOnExternalPower
         let wasCharging = isCharging
         let oldLevel = previousBatteryLevel

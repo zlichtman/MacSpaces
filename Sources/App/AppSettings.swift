@@ -11,6 +11,14 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(notchEnabled, forKey: "notchEnabled") }
     }
 
+    /// Shift-drag a file for the format wheel (Option-Shift for tools).
+    @Published var fileConverterEnabled: Bool {
+        didSet {
+            defaults.set(fileConverterEnabled, forKey: "fileConverterEnabled")
+            Task { @MainActor [fileConverterEnabled] in ConverterWheel.shared.setEnabled(fileConverterEnabled) }
+        }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet { updateLaunchAtLogin() }
     }
@@ -22,9 +30,11 @@ final class AppSettings: ObservableObject {
     private init() {
         defaults.register(defaults: [
             "notchEnabled": true,
+            "fileConverterEnabled": true,
         ])
 
         notchEnabled = defaults.bool(forKey: "notchEnabled")
+        fileConverterEnabled = defaults.bool(forKey: "fileConverterEnabled")
         defaults.set(false, forKey: "dockEnabled")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
