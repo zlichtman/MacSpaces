@@ -1,0 +1,34 @@
+{
+  "fill": "none",
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "slashes.png",
+          "name": "slashes"
+        },
+        {
+          "glass": false,
+          "image-name": "black.png",
+          "name": "black"
+        }
+      ],
+      "lighting": "individual",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
