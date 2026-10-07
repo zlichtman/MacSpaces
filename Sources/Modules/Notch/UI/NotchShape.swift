@@ -5,6 +5,7 @@ import SwiftUI
 struct NotchShape: Shape {
     var topCornerRadius: CGFloat
     var bottomCornerRadius: CGFloat
+    var roundsTopInward = false
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topCornerRadius, bottomCornerRadius) }
@@ -19,6 +20,23 @@ struct NotchShape: Shape {
         let top = topCornerRadius
         let bottom = min(bottomCornerRadius, rect.height / 2)
 
+        if roundsTopInward {
+            let body = rect.insetBy(dx: top, dy: 0)
+            path.move(to: CGPoint(x: body.minX + top, y: body.minY))
+            path.addQuadCurve(to: CGPoint(x: body.minX, y: body.minY + top),
+                              control: CGPoint(x: body.minX, y: body.minY))
+            path.addLine(to: CGPoint(x: body.minX, y: body.maxY - bottom))
+            path.addQuadCurve(to: CGPoint(x: body.minX + bottom, y: body.maxY),
+                              control: CGPoint(x: body.minX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX - bottom, y: body.maxY))
+            path.addQuadCurve(to: CGPoint(x: body.maxX, y: body.maxY - bottom),
+                              control: CGPoint(x: body.maxX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX, y: body.minY + top))
+            path.addQuadCurve(to: CGPoint(x: body.maxX - top, y: body.minY),
+                              control: CGPoint(x: body.maxX, y: body.minY))
+            path.closeSubpath()
+            return path
+        }
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
 
         // Top-left ear curves inward without drawing outside the surface's
@@ -52,6 +70,7 @@ struct NotchShape: Shape {
 struct NotchEdgeShape: Shape {
     var topCornerRadius: CGFloat
     var bottomCornerRadius: CGFloat
+    var roundsTopInward = false
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topCornerRadius, bottomCornerRadius) }
@@ -66,6 +85,23 @@ struct NotchEdgeShape: Shape {
         let top = topCornerRadius
         let bottom = min(bottomCornerRadius, rect.height / 2)
 
+        if roundsTopInward {
+            let body = rect.insetBy(dx: top, dy: 0)
+            path.move(to: CGPoint(x: body.minX + top, y: body.minY))
+            path.addQuadCurve(to: CGPoint(x: body.minX, y: body.minY + top),
+                              control: CGPoint(x: body.minX, y: body.minY))
+            path.addLine(to: CGPoint(x: body.minX, y: body.maxY - bottom))
+            path.addQuadCurve(to: CGPoint(x: body.minX + bottom, y: body.maxY),
+                              control: CGPoint(x: body.minX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX - bottom, y: body.maxY))
+            path.addQuadCurve(to: CGPoint(x: body.maxX, y: body.maxY - bottom),
+                              control: CGPoint(x: body.maxX, y: body.maxY))
+            path.addLine(to: CGPoint(x: body.maxX, y: body.minY + top))
+            path.addQuadCurve(to: CGPoint(x: body.maxX - top, y: body.minY),
+                              control: CGPoint(x: body.maxX, y: body.minY))
+
+            return path
+        }
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
         path.addQuadCurve(
             to: CGPoint(x: rect.minX + top, y: rect.minY + top),

@@ -7,7 +7,12 @@ struct ShortcutsWidget: View {
 
     var body: some View {
         Group {
-            if service.isLoading && service.names.isEmpty {
+            if let running = service.runningName {
+                VStack(spacing: 5) {
+                    Text(running).font(.system(size: 10, weight: .medium)).lineLimit(2)
+                    Button("Cancel") { service.cancel() }.buttonStyle(WidgetChipStyle(height: 24))
+                }.padding(8)
+            } else if service.isLoading && service.names.isEmpty {
                 ProgressView()
                     .controlSize(.small)
             } else if service.names.isEmpty {
@@ -57,8 +62,9 @@ struct ShortcutsWidget: View {
                 HStack {
                     Text("Shortcuts").font(.headline)
                     Spacer()
-                    Button { service.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    RefreshButton { service.refresh() }
                         .buttonStyle(.plain)
+                        .help("Refresh shortcuts")
                 }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 5) {

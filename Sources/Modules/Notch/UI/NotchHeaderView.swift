@@ -1,148 +1,136 @@
 import SwiftUI
 
-/// Tab strip shown at the top of the expanded nook.
+/// App navigation lives below the panel; Home retains the user's widget layout.
 struct NotchHeaderView: View {
     @ObservedObject var viewModel: NotchViewModel
-    // Observed separately so the Tray count follows drops and removals.
-    @ObservedObject private var shelf: ShelfStore
+    @ObservedObject private var settings: NookSettings
+    @ObservedObject private var nowPlaying: NowPlayingController
     @ObservedObject private var theme = ThemeStore.shared
-    @Namespace private var tabSelection
+    @Namespace private var selection
+
 
     init(viewModel: NotchViewModel) {
         self.viewModel = viewModel
-        self.shelf = viewModel.shelf
+        self.settings = viewModel.settings
+        self.nowPlaying = viewModel.nowPlaying
     }
 
     var body: some View {
+        let maximumWidth = viewModel.expandedSize.width - 16
+        let settingsButtons = 1 + (settings.showDockPin ? 1 : 0) + (settings.showDockClose ? 1 : 0)
+        let settingsWidth = CGFloat(settingsButtons * 30 + (settingsButtons - 1) * 3 + 8)
+        let hasProfiles = viewModel.selectedTab == .nook && settings.profiles.count > 1
+        let hasMusic = viewModel.selectedTab == .music
+        let naturalControlsWidth: CGFloat = hasMusic ? MusicDockControls.width(for: nowPlaying.info) : hasProfiles ? CGFloat(settings.profiles.count * 33 + 5) : 0
+        let controlsWidth = min(naturalControlsWidth, max(38, maximumWidth - settingsWidth - 90))
+        let gapWidth: CGFloat = naturalControlsWidth > 0 ? 16 : 8
+        let appWidth = min(CGFloat(settings.dockPages.count * 33 + 5), max(38, maximumWidth - settingsWidth - controlsWidth - gapWidth))
         HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 3) {
+                    ForEach(settings.dockPages) { tabButton($0) }
+                }
+                .padding(4)
+            }
+            .frame(width: appWidth, height: 38)
+            .background(theme.notch.surface, in: Capsule())
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(theme.nookForeground.opacity(0.12), lineWidth: 0.75))
+            .accessibilityLabel("App pages")
+
+            if hasMusic {
+                MusicDockControls(nowPlaying: viewModel.nowPlaying)
+                    .foregroundStyle(theme.nookForeground.opacity(0.65))
+                    .padding(4)
+                    .background(theme.notch.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(theme.nookForeground.opacity(0.12), lineWidth: 0.75))
+                    .accessibilityLabel("Music controls")
+            } else if hasProfiles {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 3) {
+                        ForEach(settings.profiles) { homeButton($0) }
+                    }.padding(4)
+                }
+                .frame(width: controlsWidth, height: 38)
+                .background(theme.notch.surface, in: Capsule())
+                .clipShape(Capsule())
+                .overlay(Capsule().strokeBorder(theme.nookForeground.opacity(0.12), lineWidth: 0.75))
+                .accessibilityLabel("Home profiles")
+            }
             HStack(spacing: 3) {
-                ForEach(NotchTab.allCases) { tab in
-                    tabButton(tab)
-                }
-            }
-            .padding(3)
-            .background(Color.white.opacity(0.075), in: Capsule())
-
-            Spacer()
-
-            HStack(spacing: 2) {
-                if viewModel.selectedTab == .nook {
-                    AddNookWidgetMenu(settings: viewModel.settings)
-                        .fixedSize()
-
-                    Menu {
-                        SurfacePaletteMenuContent(surface: .notch) {
-                            viewModel.collapse()
-                            SettingsWindowController.shared.show(.appearance)
-                        }
-                    } label: {
-                        Image(systemName: "paintpalette")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(theme.notch.accent)
-                            .frame(width: 28, height: 26)
-                            .contentShape(Rectangle())
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Change Nook Theme")
-
-                    Button {
-                        withAnimation(Design.spring()) {
-                            viewModel.settings.showTeleprompterBar.toggle()
-                        }
-                    } label: {
-                        Image(
-                            systemName: viewModel.settings.showTeleprompterBar
-                                ? "captions.bubble.fill"
-                                : "captions.bubble"
-                        )
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(
-                            viewModel.settings.showTeleprompterBar
-                                ? theme.notch.accent
-                                : Color.secondary
-                        )
-                        .frame(width: 28, height: 26)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(NookIconButtonStyle())
-                    .help(
-                        viewModel.settings.showTeleprompterBar
-                            ? "Hide Lyrics & Captions"
-                            : "Show Lyrics & Captions"
-                    )
-                }
-
                 Button {
                     viewModel.collapse()
-                    SettingsWindowController.shared.show(.widgets)
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 28, height: 26)
-                        .contentShape(Rectangle())
+                    SettingsWindowController.shared.show()
+                } label: { dockIcon("gearshape") }
+                    .help("Settings").accessibilityLabel("Settings")
+                if settings.showDockPin {
+                    Button { viewModel.togglePin() } label: { dockIcon(viewModel.isPinned ? "pin.fill" : "pin") }
+                        .foregroundStyle(viewModel.isPinned ? theme.notch.accent : theme.nookForeground)
+                        .help(viewModel.isPinned ? "Unpin Nook" : "Keep Nook open").accessibilityLabel(viewModel.isPinned ? "Unpin Nook" : "Keep Nook open")
                 }
-                .buttonStyle(NookIconButtonStyle())
-                .help("Nook Settings")
-
-                Button {
-                    viewModel.collapse()
-                } label: {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 28, height: 26)
-                        .contentShape(Rectangle())
+                if settings.showDockClose {
+                    Button { viewModel.collapse() } label: { dockIcon("chevron.up") }
+                        .help("Close Nook").accessibilityLabel("Close Nook")
                 }
-                .buttonStyle(NookIconButtonStyle())
-                .help("Close Nook")
             }
-            .fixedSize(horizontal: true, vertical: false)
-            .foregroundStyle(.secondary)
-            .background(Color.white.opacity(0.075), in: Capsule())
+            .padding(4)
+            .background(theme.notch.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(theme.nookForeground.opacity(0.12), lineWidth: 0.75))
+            .accessibilityLabel("Nook settings and controls")
         }
+        .buttonStyle(.plain)
+        .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
+        // Hiding the page you're on returns to Home. Tray stays reachable
+        // because dropping a file on the notch always opens it.
+        .onChange(of: settings.dockApps) { pages in
+            let current = viewModel.selectedTab
+            if current != .nook, current != .tray, !pages.contains(current) {
+                withAnimation(Design.spring()) { viewModel.selectedTab = .nook }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    private func dockIcon(_ name: String) -> some View {
+        Image(systemName: name).font(.system(size: 12, weight: .medium))
+            .frame(width: 30, height: 30).contentShape(Circle())
+    }
+    /// Shows that Home: switches the active profile and opens Home.
+    private func homeButton(_ profile: NookProfile) -> some View {
+        let current = viewModel.selectedTab == .nook && settings.activeProfileID == profile.id
+        return Button {
+            Haptics.tap()
+            withAnimation(Design.spring()) {
+                settings.activeProfileID = profile.id
+                viewModel.selectedTab = .nook
+            }
+        } label: {
+            dockIcon(settings.symbol(for: profile))
+                .foregroundStyle(current ? theme.notch.accent : theme.nookForeground.opacity(0.65))
+                .background {
+                    if current {
+                        Circle().fill(theme.notch.accent.opacity(0.14))
+                            .matchedGeometryEffect(id: "profile", in: selection)
+                    }
+                }
+        }
+        .help(profile.name).accessibilityLabel("Home: \(profile.name)")
+        .accessibilityAddTraits(current ? .isSelected : [])
     }
 
     private func tabButton(_ tab: NotchTab) -> some View {
-        let isSelected = viewModel.selectedTab == tab
-        let trayCount = tab == .tray ? shelf.items.count : 0
-        return Button {
-            guard viewModel.selectedTab != tab else { return }
+        Button {
             Haptics.tap()
-            withAnimation(Design.spring()) {
-                viewModel.selectedTab = tab
-            }
+            withAnimation(Design.spring()) { viewModel.selectedTab = tab }
         } label: {
-            HStack(spacing: 4) {
-                Label(tab.title, systemImage: tab.systemImage)
-                    .labelStyle(.titleAndIcon)
-                if trayCount > 0 {
-                    Text("\(trayCount)")
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 14, minHeight: 14)
-                        .background(theme.notch.accent.opacity(isSelected ? 0.45 : 0.25), in: Capsule())
-                        .foregroundStyle(Color.primary)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-                .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .foregroundStyle(isSelected ? Color.primary : Color.secondary.opacity(0.72))
+            dockIcon(tab.systemImage)
+                .foregroundStyle(viewModel.selectedTab == tab ? theme.notch.accent : theme.nookForeground.opacity(0.65))
                 .background {
-                    // One pill slides between tabs instead of only the
-                    // label weight changing.
-                    if isSelected {
-                        Capsule()
-                            .fill(Color.white.opacity(0.12))
-                            .matchedGeometryEffect(id: "selectedTab", in: tabSelection)
+                    if viewModel.selectedTab == tab {
+                        Circle().fill(theme.notch.accent.opacity(0.14))
+                            .matchedGeometryEffect(id: "app", in: selection)
                     }
                 }
-                .contentShape(Capsule())
-                .animation(Design.spring(), value: trayCount)
-        }
-        .buttonStyle(PremiumPressButtonStyle())
-        .help(trayCount > 0 ? "\(tab.title) · \(trayCount) \(trayCount == 1 ? "item" : "items")" : tab.title)
+        }.help(tab.title).accessibilityLabel(tab.title)
+            .accessibilityAddTraits(viewModel.selectedTab == tab ? .isSelected : [])
     }
 }
