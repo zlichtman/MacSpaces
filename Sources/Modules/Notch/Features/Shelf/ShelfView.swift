@@ -9,14 +9,28 @@ struct ShelfView: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        Group {
-            if store.items.isEmpty {
-                emptyState
-            } else {
-                itemGrid
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Button("Paste") { store.paste() }.keyboardShortcut("v").buttonStyle(WidgetChipStyle(height: 24))
+                Button("Preview") { store.quickLook() }.disabled(store.selectedItems.isEmpty).buttonStyle(WidgetChipStyle(height: 24))
+                FileActionMenu(store: store)
+                ShareLink(items: store.selectedItems.map(\.url)) { Label("Share", systemImage: "square.and.arrow.up") }
+                    .disabled(store.selectedItems.isEmpty).buttonStyle(WidgetChipStyle(height: 24))
+                Spacer(minLength: 0)
+                if store.canUndoRemoval {
+                    Button("Undo Remove") { store.undoRemoval() }.buttonStyle(WidgetChipStyle(height: 24))
+                }
+            }.padding(.horizontal, 8)
+            if let error = store.errorText {
+                HStack {
+                    Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    if store.needsRecovery { Button("Preserve & Recover") { store.recoverPersistence() }.buttonStyle(WidgetChipStyle(height: 24)) }
+                }.padding(.horizontal, 8)
             }
+            if store.items.isEmpty { emptyState.frame(maxHeight: .infinity) } else { itemGrid }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             shape
                 .fill(ThemeStore.shared.accent.opacity(isDropTargeted ? 0.08 : 0))
@@ -30,12 +44,12 @@ struct ShelfView: View {
                 }
         }
         .animation(Design.hoverAnimation, value: isDropTargeted)
-        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+        .onAppear { store.pruneMissingItems() }
+        .onDrop(of: [UTType.fileURL, .url, .image, .plainText], isTargeted: $isDropTargeted) { providers in
             let accepted = store.handleDrop(providers: providers)
             if accepted { Haptics.drop() }
             return accepted
         }
-        .onAppear { store.pruneMissingItems() }
     }
 
     private var emptyState: some View {
@@ -65,7 +79,7 @@ struct ShelfView: View {
                             item: item,
                             store: store,
                             thumbnail: store.thumbnails[item.id],
-                            isSelected: store.selectedItemID == item.id,
+                            isSelected: store.selectedIDs.contains(item.id),
                             isBusy: store.busyItemIDs.contains(item.id)
                         )
                         .transition(.scale(scale: 0.7).combined(with: .opacity))
@@ -82,7 +96,7 @@ struct ShelfView: View {
                             .font(.system(size: 10, weight: .semibold))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        let details = item.details
+                        let details = store.unavailableIDs.contains(item.id) ? "Unavailable · reconnect the drive or Locate" : item.details
                         if !details.isEmpty {
                             Text(details)
                                 .font(.system(size: 9))
@@ -91,9 +105,13 @@ struct ShelfView: View {
                         }
                     }
                     Spacer(minLength: 0)
+                    if store.unavailableIDs.contains(item.id) {
+                        Button("Locate") { store.locate(item) }.buttonStyle(WidgetChipStyle(height: 22))
+                    }
                     actionButton("Open", systemImage: "arrow.up.forward.app") { store.open(item) }
                     actionButton("Reveal in Finder", systemImage: "folder") { store.revealInFinder(item) }
                     actionButton("Copy", systemImage: "doc.on.doc") { store.copyToPasteboard(item) }
+                    actionButton("AirDrop", systemImage: "dot.radiowaves.left.and.right") { store.airDrop(item) }
                     actionButton("Remove from Tray", systemImage: "xmark") {
                         Haptics.drop()
                         store.remove(item)
@@ -110,6 +128,13 @@ struct ShelfView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button { store.airDropAll() } label: {
+                    Label(store.items.count == 1 ? "AirDrop" : "AirDrop All", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .help("Send every file here with AirDrop")
                 Button {
                     Haptics.drop()
                     store.removeAll()
@@ -174,6 +199,15 @@ private struct ShelfItemView: View {
                     lineWidth: 1
                 )
         }
+        .overlay {
+            ShelfDragHandle(store: store, item: item)
+                .accessibilityLabel(item.name)
+        }
+        .overlay(alignment: .topLeading) {
+            if store.unavailableIDs.contains(item.id) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).padding(2).allowsHitTesting(false)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !isBusy {
                 Button {
@@ -200,24 +234,11 @@ private struct ShelfItemView: View {
         .animation(Design.hoverAnimation, value: isHovering)
         .onHover { hovering in
             isHovering = hovering
-            if hovering { store.select(item) }
         }
-        .onDrag {
-            NSItemProvider(object: item.url as NSURL)
-        }
-        // Double-tap must win over single-tap; a plain `.onTapGesture` attached
-        // first would swallow the second click and open would never fire.
-        .gesture(
-            TapGesture(count: 2).exclusively(before: TapGesture())
-                .onEnded { value in
-                    switch value {
-                    case .first: store.open(item)
-                    case .second: store.select(item)
-                    }
-                }
-        )
         .contextMenu {
             Button("Open") { store.open(item) }
+            Button("Quick Look") { store.select(item); store.quickLook() }
+            if store.unavailableIDs.contains(item.id) { Button("Locate File") { store.locate(item) } }
             Button("Reveal in Finder") { store.revealInFinder(item) }
             Divider()
             Button("Copy") { store.copyToPasteboard(item) }
@@ -226,14 +247,15 @@ private struct ShelfItemView: View {
             Divider()
             let type = UTType(filenameExtension: item.url.pathExtension)
             if type?.conforms(to: .image) == true {
-                Button("Convert to PNG…") { store.process(item, operation: .png) }.disabled(isBusy)
-                Button("Convert to JPEG…") { store.process(item, operation: .jpeg) }.disabled(isBusy)
+                Button("Convert to PNG") { store.process(item, operation: .png) }.disabled(isBusy)
+                Button("Convert to JPEG") { store.process(item, operation: .jpeg) }.disabled(isBusy)
                 if #available(macOS 14, *) {
-                    Button("Remove Background…") { store.process(item, operation: .removeBackground) }.disabled(isBusy)
+                    Button("Remove Background") { store.process(item, operation: .removeBackground) }.disabled(isBusy)
                 }
             }
             if type?.conforms(to: .image) == true || type?.conforms(to: .pdf) == true {
-                Button("Extract Text…") { store.process(item, operation: .extractText) }.disabled(isBusy)
+                Button("Copy Text") { store.copyText(item) }.disabled(isBusy)
+                Button("Extract Text") { store.process(item, operation: .extractText) }.disabled(isBusy)
             }
             Divider()
             Button("Share via AirDrop") { store.airDrop(item) }
@@ -275,5 +297,70 @@ private struct ShelfItemView: View {
             }
         }
         .animation(Design.hoverAnimation, value: thumbnail != nil)
+    }
+}
+
+/// A native drag can carry every selected file, unlike SwiftUI's single provider.
+private struct ShelfDragHandle: NSViewRepresentable {
+    let store: ShelfStore
+    let item: ShelfItem
+    func makeNSView(context: Context) -> DragView { DragView() }
+    func updateNSView(_ view: DragView, context: Context) {
+        view.store = store; view.item = item
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.button)
+        view.setAccessibilityLabel(item.url.lastPathComponent)
+        view.setAccessibilityHelp("Select file. Space previews; Delete removes its reference from Tray.")
+    }
+    final class DragView: NSView, NSDraggingSource {
+        weak var store: ShelfStore?
+        var item: ShelfItem?
+        private var mouseStart: NSEvent?
+        private var dragging = false
+        override var acceptsFirstResponder: Bool { true }
+        override func accessibilityPerformPress() -> Bool { guard let store, let item else { return false }; store.select(item); return true }
+        override func mouseDown(with event: NSEvent) {
+            guard let item, let store else { return }
+            window?.makeFirstResponder(self)
+            mouseStart = event
+            if event.clickCount == 2 { store.open(item); return }
+            if !store.selectedIDs.contains(item.id) || event.modifierFlags.contains(.command) || event.modifierFlags.contains(.shift) {
+                store.select(item, extending: event.modifierFlags.contains(.command), range: event.modifierFlags.contains(.shift))
+            }
+        }
+        override func mouseDragged(with event: NSEvent) {
+            guard !dragging, let start = mouseStart, let store, hypot(event.locationInWindow.x - start.locationInWindow.x, event.locationInWindow.y - start.locationInWindow.y) > 4 else { return }
+            let files = store.selectedItems.filter { !store.unavailableIDs.contains($0.id) }
+            guard !files.isEmpty else { return }
+            dragging = true
+            let items = files.enumerated().map { index, file in
+                let drag = NSDraggingItem(pasteboardWriter: file.url as NSURL)
+                drag.setDraggingFrame(NSRect(x: Double(index * 8), y: Double(index * 8), width: 44, height: 44), contents: file.icon)
+                return drag
+            }
+            beginDraggingSession(with: items, event: event, source: self)
+        }
+        override func mouseUp(with event: NSEvent) { mouseStart = nil }
+        override func keyDown(with event: NSEvent) {
+            guard let store else { return }
+            switch event.keyCode {
+            case 49: store.quickLook()
+            case 123: store.selectNext(-1)
+            case 124: store.selectNext(1)
+            case 51, 117: store.removeSelected()
+            default:
+                if event.modifierFlags.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased() {
+                    switch key {
+                    case "a": store.selectAll()
+                    case "v": store.paste()
+                    case "z": store.undoRemoval()
+                    case "c": NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects(store.selectedItems.map { $0.url as NSURL })
+                    default: super.keyDown(with: event)
+                    }
+                } else { super.keyDown(with: event) }
+            }
+        }
+        func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .copy }
+        func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) { dragging = false; mouseStart = nil }
     }
 }
