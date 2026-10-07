@@ -1,13 +1,32 @@
-MacSpaces **1.14** — the stable release for macOS 13 and later.
+# MacSpaces 2.80
 
-1.14 is the release previously published as 1.0.0 (build 14), renamed to the
-`major.build` version scheme. The app is unchanged.
+**2.80** is the current MacSpaces release, for macOS 15 or later on Apple silicon
+and Intel.
 
-- Stops SwiftUI from resizing the Nook host window during AppKit layout, addressing the captured layout-loop crash and resize churn.
-- Tray keeps the Nook profile width instead of expanding to the maximum width.
-- Settings window size is owned by AppKit, preventing competing ideal-size updates.
-- Preserves the desktop-click anchoring fix, existing preferences, profiles and Tray files.
+Changes in 2.80:
 
-**macOS 13 or later · Apple silicon and Intel · Signed and notarized**
+- **Notifications open where they belong.** If the Messages page is in your dock, a new message opens the Nook on that conversation instead of showing a card. If the Terminal page is there, a coding agent that needs you opens its Agents tab. The Nook closes again after a few seconds unless you move in, and never jumps while you're using it.
+- **Snugger cards.** The cards that still slide down under the notch are now only as tall as what they say.
 
-MacSpaces 2.x is a separate pre-release for macOS 26 on Apple silicon.
+Also in 2.79:
+
+- **A file in the middle of the converter wheel.** Hold Shift while dragging a file and the wheel's centre now shows a file with its type (PNG, PDF, ZIP…) and size, instead of a picture of what's inside. Several files show as a stack.
+
+Also in 2.78:
+
+- **No gap beside the camera.** The icons beside the closed notch now sit right up against the camera, with room left only for the rounded corners.
+
+Also in 2.77:
+
+- **A snugger closed notch.** The icons and counts beside the notch now take only the room they need, so there's no empty stretch around a coding agent, a screenshot or a timer.
+
+Also in 2.76 (fixes from an engineering audit):
+
+- **Replies go where you wrote them.** On the Messages page each conversation keeps its own draft, and Send sends that draft to that conversation, even if you switch chats or use the Nook on another display.
+- **Saved scripts and pins are never thrown away.** If your teleprompter scripts or clipboard pins can't be opened, MacSpaces leaves the file as it is instead of saving over it. Start New Library (scripts) or Clear All (clipboard) keeps the old file beside the new one.
+- **Voice following stays on your Mac.** The teleprompter follows your voice only with on-device recognition; otherwise it scrolls and tells you why. Audio is never sent anywhere.
+- **Maccy imports follow your filters.** Copies from ignored apps, and ones marked private by password managers, stay out.
+- **Focus turns back off.** If you switch off "Silence during focus" mid-session, Do Not Disturb still turns off when the session pauses or ends.
+- **Steadier Messages page.** It keeps running on one display when you close it on another, and never fills back in after closing.
+- **Truer coding stats.** Codex usage is no longer counted twice, and rankings cover only the last 14 days.
+- **Hidden apps from the start.** The Nook now stays hidden when an app you excluded is already in front as MacSpaces starts.
