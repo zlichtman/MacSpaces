@@ -36,36 +36,66 @@ enum LocalFileTools {
     }
     private static let queue = DispatchQueue(label: "dev.opensource.MacSpaces.file-tools", qos: .userInitiated)
 
-    static func process(_ url: URL, operation: Operation) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
-            queue.async {
-                do { continuation.resume(returning: try autoreleasepool { try transform(url, operation: operation) }) }
-                catch { continuation.resume(throwing: error) }
-            }
+    private final class OperationControl: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+        private var request: VNRequest?
+        func cancel() {
+            lock.lock(); cancelled = true; let current = request; lock.unlock()
+            current?.cancel()
         }
+        func check() throws {
+            lock.lock(); let stopped = cancelled; lock.unlock()
+            if stopped { throw CancellationError() }
+        }
+        func register(_ request: VNRequest) throws {
+            lock.lock()
+            if cancelled { lock.unlock(); request.cancel(); throw CancellationError() }
+            self.request = request; lock.unlock()
+        }
+    }
+    static func process(_ url: URL, operation: Operation) async throws -> Data {
+        let control = OperationControl()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async {
+                    do {
+                        let data = try autoreleasepool { try transform(url, operation: operation, control: control) }
+                        try control.check()
+                        continuation.resume(returning: data)
+                    } catch { continuation.resume(throwing: error) }
+                }
+            }
+        } onCancel: { control.cancel() }
     }
 
     static func transform(_ url: URL, operation: Operation) throws -> Data {
+        try transform(url, operation: operation, control: OperationControl())
+    }
+    private static func transform(_ url: URL, operation: Operation, control: OperationControl) throws -> Data {
+        try control.check()
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard url.isFileURL, values.isRegularFile == true else { throw Failure.unsupported }
         guard (values.fileSize ?? Int.max) <= 100 * 1024 * 1024 else { throw Failure.tooLarge }
         if operation == .extractText, url.pathExtension.lowercased() == "pdf" {
-            return try extractPDF(url)
+            return try extractPDF(url, control: control)
         }
         let image = try loadImage(url)
         switch operation {
         case .extractText:
-            let text = try recognize(image)
+            let text = try recognize(image, control: control)
             guard !text.isEmpty else { throw Failure.noText }
             return Data(text.utf8)
         case .removeBackground:
             if #available(macOS 14, *) {
                 let request = VNGenerateForegroundInstanceMaskRequest()
+                try control.register(request)
                 let handler = VNImageRequestHandler(cgImage: image)
                 try handler.perform([request])
                 guard let result = request.results?.first, !result.allInstances.isEmpty else { throw Failure.noSubject }
                 let buffer = try result.generateMaskedImage(ofInstances: result.allInstances, from: handler,
                                                            croppedToInstancesExtent: false)
+                try control.check()
                 let ci = CIImage(cvPixelBuffer: buffer)
                 guard let output = CIContext().createCGImage(ci, from: ci.extent) else { throw Failure.unsupported }
                 return try encode(output, jpeg: false)
@@ -107,21 +137,24 @@ enum LocalFileTools {
         return data as Data
     }
 
-    private static func recognize(_ image: CGImage) throws -> String {
+    private static func recognize(_ image: CGImage, control: OperationControl) throws -> String {
         let request = VNRecognizeTextRequest()
+        try control.register(request)
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         request.automaticallyDetectsLanguage = true
         try VNImageRequestHandler(cgImage: image).perform([request])
+        try control.check()
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 
-    private static func extractPDF(_ url: URL) throws -> Data {
+    private static func extractPDF(_ url: URL, control: OperationControl) throws -> Data {
         guard let document = PDFDocument(url: url) else { throw Failure.unsupported }
         guard !document.isLocked else { throw Failure.lockedPDF }
         guard document.pageCount <= 100 else { throw Failure.tooLarge }
         var pages: [String] = []
         for index in 0..<document.pageCount {
+            try control.check()
             let text: String = try autoreleasepool {
                 guard let page = document.page(at: index) else { throw Failure.unsupported }
                 if let text = page.string, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return text }
@@ -130,7 +163,7 @@ enum LocalFileTools {
                 let scale = min(3, 2400 / max(bounds.width, bounds.height))
                 let image = page.thumbnail(of: CGSize(width: bounds.width * scale, height: bounds.height * scale), for: .mediaBox)
                 guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { throw Failure.unsupported }
-                return try recognize(cg)
+                return try recognize(cg, control: control)
             }
             pages.append(text)
         }
