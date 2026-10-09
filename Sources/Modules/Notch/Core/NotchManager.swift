@@ -46,6 +46,10 @@ final class NotchManager {
         entry.window.makeKeyAndOrderFront(nil)
     }
 
+    func closeDictation() {
+        for entry in entries where entry.viewModel.selectedTab == .dictation { entry.viewModel.collapse() }
+    }
+
     func start() {
         Self.active = self
         rebuildWindows()

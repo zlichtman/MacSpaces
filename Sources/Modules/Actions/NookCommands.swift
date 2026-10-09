@@ -11,21 +11,24 @@ enum NookCommands {
         let symbol: String
         let run: () -> Void
     }
-    static func open(_ page: NotchTab) {
+    static func open(_ page: NotchTab, target: NSRunningApplication? = nil) {
+        if page == .dictation { DictationModel.shared.captureTarget(target) }
         AppSettings.shared.notchEnabled = true
         DispatchQueue.main.async { NotchManager.active?.openForKeyboard(page) }
     }
     static var all: [Command] {
         var commands = ([NotchTab.nook] + NotchTab.appPages).map { tab in
-            Command(id: "page." + tab.rawValue, title: "Open " + tab.title, detail: "Nook page", symbol: tab.systemImage) { open(tab) }
+            Command(id: "page." + tab.rawValue, title: "Open " + tab.title, detail: "Nook page", symbol: tab.systemImage) {
+                open(tab, target: tab == .dictation ? ActionSearchWindow.shared.previousApp : nil)
+            }
         }
         commands += [
             Command(id: "clipboard.popup", title: "Clipboard History", detail: "Search and paste copied items", symbol: "doc.on.clipboard") { ClipboardPopup.shared.show() },
             Command(id: "files.tools", title: "File Tools", detail: "Convert, resize, crop, compress, extract text", symbol: "wand.and.stars") { FileToolsWindow.shared.show() },
             Command(id: "files.baskets", title: "File Baskets", detail: "Stage files anywhere on the desktop", symbol: "tray.full") { BasketWindowController.shared.show() },
             Command(id: "files.paste", title: "Paste into Tray", detail: "Stage copied files, text, links or images", symbol: "tray.and.arrow.down") { ShelfStore.shared.paste(); open(.tray) },
-            Command(id: "voice.dictation", title: "Dictation", detail: "On-device speech to text", symbol: "mic") { DictationWindow.shared.show(target: ActionSearchWindow.shared.previousApp) },
-            Command(id: "meetings.controls", title: "Meeting Controls", detail: "Join, microphone and camera controls", symbol: "video") { MeetingControlsWindow.shared.show() },
+            Command(id: "voice.dictation", title: "Dictation", detail: "On-device speech to text", symbol: "mic") { open(.dictation, target: ActionSearchWindow.shared.previousApp) },
+            Command(id: "meetings.controls", title: "Meeting Controls", detail: "Join, microphone and camera controls", symbol: "video") { open(.meetings) },
             Command(id: "settings.general", title: "General Settings", detail: "Behavior, displays and updates", symbol: "gearshape") { SettingsWindowController.shared.show(.general) },
             Command(id: "settings.themes", title: "Themes", detail: "Appearance and accessibility", symbol: "paintpalette") { SettingsWindowController.shared.show(.appearance) },
             Command(id: "settings.widgets", title: "Widgets and Profiles", detail: "Customize Home and dock", symbol: "square.grid.2x2") { SettingsWindowController.shared.show(.widgets) },
@@ -168,7 +171,7 @@ final class NookHotKeys: ObservableObject {
                     case 3: NookCommands.open(.tray)
                     case 4: NookCommands.open(.music)
                     case 5: NookCommands.open(.terminal)
-                    case 6: DictationWindow.shared.show()
+                    case 6: NookCommands.open(.dictation)
                     default: break
                     }
                 } }

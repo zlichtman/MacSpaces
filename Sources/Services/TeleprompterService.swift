@@ -36,13 +36,30 @@ final class TeleprompterService: ObservableObject {
         let text: String
     }
 
-    private struct LyricsRecord: Decodable {
+    struct LyricsRecord: Decodable {
         let trackName: String
         let artistName: String
-        let duration: Double
+        let duration: Double?
         let plainLyrics: String?
         let syncedLyrics: String?
         var instrumental: Bool? = false
+    }
+
+    private struct LyricsSearchResponse: Decodable {
+        var records: [LyricsRecord] = []
+        init(from decoder: Decoder) throws {
+            var values = try decoder.unkeyedContainer()
+            while !values.isAtEnd {
+                // Consume each result independently: one malformed community
+                // upload must not discard valid lyrics for the same song.
+                let recordDecoder = try values.superDecoder()
+                if let record = try? LyricsRecord(from: recordDecoder) { records.append(record) }
+            }
+        }
+    }
+
+    nonisolated static func decodeLyricsRecords(_ data: Data) -> [LyricsRecord] {
+        (try? JSONDecoder().decode(LyricsSearchResponse.self, from: data))?.records ?? []
     }
 
     private struct PlainLyricsPayload: Decodable {
@@ -244,9 +261,7 @@ final class TeleprompterService: ObservableObject {
         dataTask = teleprompterURLSession.dataTask(with: request) {
             [weak self] data, response, error in
             let statusCode = (response as? HTTPURLResponse)?.statusCode
-            let records = data.flatMap {
-                try? JSONDecoder().decode([LyricsRecord].self, from: $0)
-            } ?? []
+            let records = data.map(Self.decodeLyricsRecords) ?? []
             let best = Self.bestLyricsRecord(
                 records,
                 title: searchTitle,
@@ -634,7 +649,7 @@ final class TeleprompterService: ObservableObject {
     ) -> Double? {
         let synced = record.syncedLyrics?.isEmpty == false
         let hasLyrics = synced || record.plainLyrics?.isEmpty == false || record.instrumental == true
-        return score(title: record.trackName, artist: record.artistName, duration: record.duration,
+        return score(title: record.trackName, artist: record.artistName, duration: record.duration ?? 0,
                      synced: synced, hasLyrics: hasLyrics,
                      title: title, artist: artist, duration: duration)
     }
@@ -797,7 +812,7 @@ final class TeleprompterService: ObservableObject {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty } ?? []
         guard !plain.isEmpty else { return [] }
-        let duration = fallbackDuration > 0 ? fallbackDuration : record.duration
+        let duration = fallbackDuration > 0 ? fallbackDuration : (record.duration ?? 0)
         let step = duration > 0 ? duration / Double(plain.count) : 4
         return plain.enumerated().map { index, text in
             TimedLine(start: Double(index) * step, end: nil, text: text)

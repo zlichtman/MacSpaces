@@ -454,10 +454,18 @@ final class NookSettings: ObservableObject {
         fitWidthToProfile = defaults.bool(forKey: Keys.fitWidthToProfile)
         // Unknown pages from a newer build are skipped, never fatal.
         var seenPages = Set<NotchTab>()
-        dockApps = (defaults.stringArray(forKey: Keys.dockApps)?
+        var savedDock = (defaults.stringArray(forKey: Keys.dockApps)?
             .compactMap(NotchTab.init(rawValue:))
             .filter { NotchTab.appPages.contains($0) && seenPages.insert($0).inserted })
             ?? (hasSavedConfiguration ? NotchTab.legacyDock : NotchTab.defaultDock)
+        // Offer the integrated call and voice pages once; later removals stay removed.
+        if !defaults.bool(forKey: "dock.communicationPagesAdded") {
+            for page in [NotchTab.meetings, .dictation] where !savedDock.contains(page) { savedDock.append(page) }
+            defaults.set(savedDock.map(\.rawValue), forKey: Keys.dockApps)
+            defaults.set(true, forKey: "dock.communicationPagesAdded")
+        }
+
+        dockApps = savedDock
 
         let storedProfileData = defaults.data(forKey: Keys.profiles)
         let decodedProfiles = storedProfileData.flatMap {

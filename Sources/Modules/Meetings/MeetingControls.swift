@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor
 final class MeetingControls: ObservableObject {
+    static let shared = MeetingControls()
     enum Provider: String, CaseIterable, Identifiable {
         case zoom, meetSafari, meetChrome
         var id: String { rawValue }
@@ -15,6 +16,11 @@ final class MeetingControls: ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var problem: String?
     private var generation = UUID()
+#if DEBUG
+    func setPreview(muted: Bool?, cameraOff: Bool?, problem: String? = nil) {
+        microphoneMuted = muted; self.cameraOff = cameraOff; self.problem = problem
+    }
+#endif
     func refresh() { perform("read") }
     func setMicrophone(muted: Bool) { perform(muted ? "mute" : "unmute") }
     func setCamera(off: Bool) { perform(off ? "cameraOff" : "cameraOn") }
@@ -154,36 +160,80 @@ private enum ZoomControls {
     }
 }
 
-@MainActor
-final class MeetingControlsWindow {
-    static let shared = MeetingControlsWindow()
-    let model = MeetingControls()
-    private var window: NSWindow?
-    func show() {
-        if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 310), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "MacSpaces Meeting Controls"; window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: MeetingControlsView(model: model)); window.center(); self.window = window
-        }
-        window?.makeKeyAndOrderFront(nil)
-    }
-}
 struct MeetingControlsView: View {
     @ObservedObject var model: MeetingControls
     @ObservedObject private var meetings = MeetingCountdown.shared
     @ObservedObject private var theme = ThemeStore.shared
+    private var connected: Bool { model.microphoneMuted != nil || model.cameraOff != nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack { Picker("Provider", selection: $model.provider) { ForEach(MeetingControls.Provider.allCases) { Text($0.title).tag($0) } }; Button(model.busy ? "Connecting…" : "Connect / Refresh") { model.refresh() }.disabled(model.busy) }
-            Text("Controls only the selected meeting app or browser tab. Unknown states stay unknown; opening this panel does not request access.").font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button(model.microphoneMuted == true ? "Unmute microphone" : "Mute microphone") { model.setMicrophone(muted: model.microphoneMuted != true) }.disabled(model.busy || model.microphoneMuted == nil)
-                Button(model.cameraOff == true ? "Start camera" : "Stop camera") { model.setCamera(off: model.cameraOff != true) }.disabled(model.busy || model.cameraOff == nil)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Meeting controls").font(.system(size: 17, weight: .semibold))
+                    Text("Your call, within reach.").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("Meeting app", selection: $model.provider) {
+                    ForEach(MeetingControls.Provider.allCases) { Text($0.title).tag($0) }
+                }.labelsHidden().frame(width: 180)
+                Button { model.refresh() } label: {
+                    Label(model.busy ? "Connecting…" : connected ? "Refresh" : "Connect", systemImage: "arrow.clockwise")
+                }.buttonStyle(WidgetChipStyle(height: 30)).disabled(model.busy)
             }
-            Text("Microphone: " + (model.microphoneMuted.map { $0 ? "muted" : "on" } ?? "unknown") + " · Camera: " + (model.cameraOff.map { $0 ? "off" : "on" } ?? "unknown")).font(.caption)
-            if let meeting = meetings.meeting, let url = meeting.meetingURL { Button("Join " + meeting.title) { NSWorkspace.shared.open(url) } }
-            if let problem = model.problem { Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+            HStack(spacing: 12) {
+                control(title: "Microphone", symbol: model.microphoneMuted == true ? "mic.slash.fill" : "mic.fill",
+                        state: model.microphoneMuted.map { $0 ? "Muted" : "On" } ?? "Not connected",
+                        action: model.microphoneMuted == true ? "Unmute" : "Mute", available: model.microphoneMuted != nil) {
+                    model.setMicrophone(muted: model.microphoneMuted != true)
+                }
+                control(title: "Camera", symbol: model.cameraOff == true ? "video.slash.fill" : "video.fill",
+                        state: model.cameraOff.map { $0 ? "Off" : "On" } ?? "Not connected",
+                        action: model.cameraOff == true ? "Start camera" : "Stop camera", available: model.cameraOff != nil) {
+                    model.setCamera(off: model.cameraOff != true)
+                }
+            }
+            if let problem = model.problem {
+                Label(problem, systemImage: "exclamationmark.circle")
+                    .font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(connected ? "Connected to " + model.provider.title : "Open your call, then connect. Controls apply to the selected app.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            if let meeting = meetings.meeting, let url = meeting.meetingURL {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    HStack {
+                        Image(systemName: "video.badge.waveform")
+                        Text(meeting.title).lineLimit(1)
+                        Spacer()
+                        Text("Join call").fontWeight(.semibold)
+                        Image(systemName: "arrow.up.right")
+                    }
+                }.buttonStyle(WidgetChipStyle(height: 34))
+            }
             Spacer(minLength: 0)
-        }.padding(20).background(theme.notch.surface).foregroundStyle(theme.nookForeground).tint(theme.notch.accent).preferredColorScheme(theme.notch.colorScheme)
+        }
+        .padding(.horizontal, 4).padding(.vertical, 8)
+        .foregroundStyle(theme.nookForeground).tint(theme.notch.accent)
+        .preferredColorScheme(theme.notch.colorScheme)
+    }
+
+    private func control(title: String, symbol: String, state: String, action: String,
+                         available: Bool, perform: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: symbol).font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(available ? theme.notch.accent : theme.nookForeground.opacity(0.4))
+                Spacer()
+                Text(state).font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            Text(title).font(.system(size: 14, weight: .semibold))
+            Button(action, action: perform).buttonStyle(WidgetChipStyle(height: 28))
+                .disabled(model.busy || !available)
+                .accessibilityLabel(action + ", " + title + " " + state)
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.notch.control, in: RoundedRectangle(cornerRadius: 16))
     }
 }

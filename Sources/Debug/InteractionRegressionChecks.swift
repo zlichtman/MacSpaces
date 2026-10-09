@@ -15,14 +15,20 @@ enum InteractionRegressionChecks {
         precondition(!dockReload.showDockPin && !dockReload.showDockClose, "Settings-only dock preference persists")
         precondition(fresh.widgets == [.media, .timer, .clock])
         precondition(fresh.size(for: .media) == .large, "Fresh installs start with Music at full size")
-        precondition(fresh.dockApps == [.music, .weather, .calendar, .system, .terminal, .tray, .timers, .mirror])
+        precondition(fresh.dockApps == [.music, .weather, .calendar, .system, .terminal, .tray, .timers, .mirror, .meetings, .dictation])
         fresh.widgets = []; fresh.flushPersistence()
         let existing = NookSettings(defaults: isolated)
         precondition(existing.widgets.isEmpty, "Do not overwrite an existing empty layout")
-        precondition(existing.dockApps == NotchTab.legacyDock, "Installs that never changed the dock keep the one they had")
+        precondition(existing.dockApps == fresh.dockApps, "The migrated dock persists")
+        existing.setDockApp(.dictation, shown: false)
+        precondition(!NookSettings(defaults: isolated).dockApps.contains(.dictation), "A removed communication page stays removed")
         existing.resetToDefaults()
         precondition(existing.widgets == NookSettings.starterWidgets)
         precondition(existing.showDockPin && existing.showDockClose, "Reset restores visible Pin and Close")
+        isolated.set(["notes", "music"], forKey: "dockApps")
+        isolated.removeObject(forKey: "dock.communicationPagesAdded")
+        let customized = NookSettings(defaults: isolated)
+        precondition(customized.dockApps == [.notes, .music, .meetings, .dictation], "Migration keeps the user's app order")
         // Stickers follow the line's meaning: the headline, then concrete nouns, then common words.
         let stickerCases: [(String, LyricSticker)] = [
             ("Made you smile and look away", .smile), ("I took your picture", .camera),
@@ -106,6 +112,10 @@ enum InteractionRegressionChecks {
         let future = #"{"id":"00000000-0000-0000-0000-000000000002","name":"Future","widgets":["media"],"widgetSizes":{"media":"huge"}}"#
         precondition(try! JSONDecoder().decode(NookProfile.self, from: Data(future.utf8)).widgets == [.media],
                      "An unknown size must not discard the profile")
+        let search = Data(#"[{"trackName":"Paul","artistName":"Big Thief","duration":184,"syncedLyrics":"[00:01.00]Fixture"},{"trackName":"Paul","artistName":"Big Thief","duration":null,"plainLyrics":"Fixture"},{"trackName":"Paul","artistName":"Big Thief","plainLyrics":"Fixture"},{"trackName":null,"artistName":"Big Thief","duration":184},{"trackName":"Another","artistName":"Artist","duration":200}]"#.utf8)
+        let records = TeleprompterService.decodeLyricsRecords(search)
+        precondition(records.count == 4 && records[0].duration == 184 && records[1].duration == nil && records[2].duration == nil && records[3].trackName == "Another", "Null or malformed results do not discard valid search matches")
+        precondition(TeleprompterService.decodeLyricsRecords(Data(#"{"error":"unavailable"}"#.utf8)).isEmpty)
         // Lyrics: only this song, and timed lyrics only from a cut of the same length.
         let exact = TeleprompterService.score(title: "Maps", artist: "Yeah Yeah Yeahs", duration: 220, synced: true, hasLyrics: true,
                                               title: "Maps", artist: "Yeah Yeah Yeahs", duration: 219.6)

@@ -12,6 +12,37 @@ import SwiftUI
         try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         InteractionRegressionChecks.run()
         DeviceRegressionChecks.run()
+        if ProcessInfo.processInfo.environment["MACSPACES_QA_SCOPE"] == "communication-pages" {
+            ThemeStore.shared.setPreset(.forest, for: .notch)
+            let settings = NookSettings.shared
+            settings.resetToDefaults()
+            let model = NotchViewModel(geometry: .synthetic, availableWidth: 1440, settings: settings,
+                shelf: ShelfStore.shared, nowPlaying: AppServices.shared.nowPlaying,
+                powerMonitor: AppServices.shared.powerMonitor, timerService: AppServices.shared.timerService,
+                bluetoothMonitor: AppServices.shared.bluetooth, systemActivityMonitor: AppServices.shared.systemActivity,
+                teleprompter: AppServices.shared.teleprompter)
+            model.state = .expanded
+            for connected in [false, true] {
+                MeetingControls.shared.setPreview(muted: connected ? true : nil, cameraOff: connected ? false : nil)
+                model.selectedTab = .meetings
+                let size = model.expandedSize
+                render(NotchContainerView(viewModel: model),
+                       to: directory.appendingPathComponent(connected ? "meetings-connected.png" : "meetings.png"),
+                       size: NSSize(width: size.width + 40, height: size.height + 50))
+            }
+            model.selectedTab = .dictation
+            for filled in [false, true] {
+                DictationModel.shared.text = filled ? "Here's the draft from our conversation. I'll share the updated design after reviewing the meeting notes." : ""
+                let size = model.expandedSize
+                render(NotchContainerView(viewModel: model),
+                       to: directory.appendingPathComponent(filled ? "dictation-draft.png" : "dictation.png"),
+                       size: NSSize(width: size.width + 40, height: size.height + 50))
+            }
+            model.collapse()
+            print("Communication pages and lyric decoding regression checks passed")
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return true
+        }
         if ProcessInfo.processInfo.environment["MACSPACES_QA_SCOPE"] == "dock-controls" {
             let settings = NookSettings.shared
             settings.resetToDefaults()

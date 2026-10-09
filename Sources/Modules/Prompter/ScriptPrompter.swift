@@ -265,7 +265,7 @@ final class VoiceFollower {
     }
 
     func start() {
-        guard !DictationWindow.shared.model.listening, !DictationWindow.shared.model.starting else {
+        guard !DictationModel.shared.listening, !DictationModel.shared.starting else {
             onProblem("Stop dictation before starting voice following.")
             return
         }

@@ -207,7 +207,7 @@ cd MacSpaces
 make
 ```
 
-That builds 2.90. The
+That builds 2.91. The
 [engineering guide](AGENTS.md) covers architecture, checks and releases.
 
 ### Quick tools
@@ -219,6 +219,11 @@ closed. Tray gains multiple-file selection/drag, Space preview, Undo Remove and
 pasting files, text, images or links. General has an opt-in completed-file folder
 watcher; File Tools has saved presets and cancellable jobs with per-file results.
 Finder Services and Shortcuts actions can stage and process selected files.
+
+Meetings and Dictation open as Nook pages from the app bar, menu, Find Action and
+Shortcuts. Both are added to existing app bars once and can be reordered or removed
+in Settings. Dictation stops when its page closes and keeps the original app as its
+Paste destination.
 
 The dock groups app pages, controls for the active app, and Settings. Home profiles
 appear in the middle bar while Home is active. Music's middle bar shows playlist

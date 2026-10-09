@@ -7,7 +7,8 @@ extension NotchTab: AppEnum {
     static var caseDisplayRepresentations: [NotchTab: DisplayRepresentation] {
         [.nook: "Home", .music: "Music", .calendar: "Calendar", .notes: "Notes", .weather: "Weather", .tray: "Tray",
          .reminders: "Reminders", .timers: "Timers", .clipboard: "Clipboard", .system: "System", .terminal: "Terminal",
-         .shortcuts: "Shortcuts", .mirror: "Mirror", .prompter: "Teleprompter", .messages: "Messages"]
+         .shortcuts: "Shortcuts", .mirror: "Mirror", .prompter: "Teleprompter", .messages: "Messages",
+         .meetings: "Meetings", .dictation: "Dictation"]
     }
 }
 struct OpenNookIntent: AppIntent {

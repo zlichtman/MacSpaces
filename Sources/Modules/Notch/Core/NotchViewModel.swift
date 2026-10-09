@@ -8,16 +8,16 @@ enum NotchState {
 }
 
 enum NotchTab: String, CaseIterable, Identifiable, Codable, Sendable {
-    case nook, music, calendar, notes, weather, tray
+    case nook, music, calendar, notes, weather, tray, meetings, dictation
     case reminders, timers, clipboard, system, terminal, shortcuts, mirror, prompter, messages
     var id: String { rawValue }
 
     /// Pages the dock can show, in the order offered in Settings.
-    static let appPages: [NotchTab] = [.music, .messages, .calendar, .reminders, .notes, .weather, .timers,
+    static let appPages: [NotchTab] = [.music, .meetings, .dictation, .messages, .calendar, .reminders, .notes, .weather, .timers,
                                        .clipboard, .shortcuts, .system, .terminal, .prompter, .mirror, .tray]
     /// A fresh install's dock (and Reset). Saved docks drop pages that no
     /// longer exist (Coding and Tsukumo were removed in 2.43).
-    static let defaultDock: [NotchTab] = [.music, .weather, .calendar, .system, .terminal, .tray, .timers, .mirror]
+    static let defaultDock: [NotchTab] = [.music, .weather, .calendar, .system, .terminal, .tray, .timers, .mirror, .meetings, .dictation]
     /// The dock before it became configurable, kept for installs that never changed it.
     static let legacyDock: [NotchTab] = [.music, .calendar, .notes, .weather, .tray]
 
@@ -38,6 +38,8 @@ enum NotchTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .mirror: return "Mirror"
         case .prompter: return "Teleprompter"
         case .messages: return "Messages"
+        case .meetings: return "Meetings"
+        case .dictation: return "Dictation"
         }
     }
 
@@ -57,6 +59,8 @@ enum NotchTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .shortcuts: return "Search and run all your Shortcuts, with Mac quick actions."
         case .mirror: return "A larger camera preview; the camera runs only while it's open."
         case .prompter: return "Your scripts, read just under the camera; hidden from screen sharing."
+        case .meetings: return "Join a call and control its microphone and camera."
+        case .dictation: return "Dictate, edit and paste into your app."
         case .messages: return "Your conversations as they happen, and replies without leaving the notch."
         }
     }
@@ -77,6 +81,8 @@ enum NotchTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .mirror: return "web.camera"
         case .prompter: return "text.alignleft"
         case .messages: return "message.fill"
+        case .meetings: return "video.fill"
+        case .dictation: return "mic.fill"
         }
     }
 }
@@ -99,7 +105,10 @@ final class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .collapsed {
         didSet {
             updateAppPresentation()
-            if state != .expanded { selectedWidget = nil }
+            if state != .expanded {
+                selectedWidget = nil
+                if selectedTab == .dictation { DictationModel.shared.stop(); isPageEditing = false }
+            }
             if state != oldValue { watchMissionControl(state == .expanded) }
         }
     }
@@ -107,6 +116,8 @@ final class NotchViewModel: ObservableObject {
     private var missionControlWatch: Timer?
     @Published var selectedTab: NotchTab = .nook {
         didSet {
+            if oldValue == .dictation, selectedTab != .dictation { DictationModel.shared.stop(); isPageEditing = false }
+            if selectedTab == .dictation, oldValue != .dictation { DictationModel.shared.captureTarget() }
             updateAppPresentation()
             if selectedTab != .nook { selectedWidget = nil }
         }
@@ -194,7 +205,8 @@ final class NotchViewModel: ObservableObject {
         switch tab {
         case .music: baseHeight = 336
         case .weather, .calendar, .reminders, .clipboard, .terminal, .shortcuts, .mirror, .prompter, .messages: baseHeight = 346
-        case .system: baseHeight = 300
+        case .system, .meetings: baseHeight = 300
+        case .dictation: baseHeight = 346
         // Timer cards are compact; a taller page only added empty space.
         case .timers: baseHeight = 236
         default: baseHeight = tiles.isEmpty && tab == .nook ? 170 : Design.nookHeight
@@ -379,6 +391,7 @@ final class NotchViewModel: ObservableObject {
 
     func expand(to tab: NotchTab? = nil) {
         collapseWorkItem?.cancel()
+        if tab == .dictation || (tab == nil && selectedTab == .dictation) { DictationModel.shared.captureTarget() }
         if let tab { selectedTab = tab }
         isHoveringCollapsed = false
         guard state != .expanded else { return }

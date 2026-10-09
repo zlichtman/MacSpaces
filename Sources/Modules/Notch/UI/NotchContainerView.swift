@@ -429,6 +429,10 @@ struct NotchContainerView: View {
                     PrompterPage(prompter: .shared, onEditingChanged: { viewModel.isPageEditing = $0 })
                 case .mirror:
                     MirrorAppView()
+                case .meetings:
+                    MeetingControlsView(model: .shared)
+                case .dictation:
+                    DictationView(model: .shared, onEditingChanged: { viewModel.isPageEditing = $0 })
                 case .messages:
                     MessagesPage(service: AppServices.shared.messages,
                                  onEditingChanged: { viewModel.isPageEditing = $0 })

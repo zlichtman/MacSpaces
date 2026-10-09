@@ -20,8 +20,8 @@ private struct MenuBarMenu: View {
         Toggle("Nook", isOn: $settings.notchEnabled)
         Toggle("File Converter", isOn: $settings.fileConverterEnabled)
         Button("File Tools") { FileToolsWindow.shared.show() }
-        Button("Dictation") { DictationWindow.shared.show() }
-        Button("Meeting Controls") { MeetingControlsWindow.shared.show() }
+        Button("Dictation") { NookCommands.open(.dictation) }
+        Button("Meeting Controls") { NookCommands.open(.meetings) }
         Button("File Baskets") { BasketWindowController.shared.show() }
 
         Divider()
