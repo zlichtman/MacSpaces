@@ -3,34 +3,47 @@ import SwiftUI
 struct SettingsPage<Content: View>: View {
     let title: String
     let subtitle: String
+    let scrollAnchor: String?
     @ViewBuilder let content: Content
     @ObservedObject private var theme = ThemeStore.shared
+    @ObservedObject private var navigation = SettingsNavigationModel.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+    init(title: String, subtitle: String, scrollAnchor: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.subtitle = subtitle
+        self.scrollAnchor = scrollAnchor
         self.content = content()
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 26, weight: .bold))
-                    Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 2)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 26, weight: .bold))
+                        Text(subtitle)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.bottom, 2)
 
-                content
+                    content
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.notch.surface)
+            .foregroundStyle(theme.nookForeground)
+            .task(id: scrollAnchor ?? navigation.searchTarget) {
+                guard let target = scrollAnchor ?? navigation.searchTarget.map({ "settings." + $0 }) else { return }
+                await Task.yield()
+                withAnimation(reduceMotion || theme.reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target, anchor: scrollAnchor == nil ? .top : .center)
+                }
+            }
         }
-        .background(theme.notch.surface)
-        .foregroundStyle(theme.nookForeground)
     }
 }
 
@@ -39,6 +52,7 @@ struct SettingsCard<Content: View>: View {
     let systemImage: String
     @ViewBuilder let content: Content
     @ObservedObject private var theme = ThemeStore.shared
+    @ObservedObject private var navigation = SettingsNavigationModel.shared
 
     init(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -64,6 +78,8 @@ struct SettingsCard<Content: View>: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(theme.notch.border, lineWidth: 1)
         }
+        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.notch.accent.opacity(navigation.searchTarget == title ? 0.65 : 0), lineWidth: 1.5) }
+        .id("settings." + title)
     }
 }
 
