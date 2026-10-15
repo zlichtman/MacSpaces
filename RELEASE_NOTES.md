@@ -1,0 +1,9 @@
+**3.15**
+
+- **A lighter opening.** Window queries, system statistics, agent scans, Tray file metadata, theme decoding and artwork preparation run away from the main thread. The Nook reuses prepared scene resources and avoids unnecessary shell layout updates. Dock data warms as you approach, and Weather restores its last forecast while refreshing in the background.
+- **A visual Home editor.** Drag widget previews from the gallery into your layout or onto the Nook. Each widget has one fitted size, with large Music and a compact Clock. Home has fewer labels and explanations.
+- **Settings where they belong.** Lyrics stay in Appearance, with Poster as the default and all six styles available. Home keeps the regular clock, the Clock page keeps the interactive map, and Weather follows system units. App-specific controls stay on their pages. Theme groups start closed, and unused dock apps are alphabetical. Updates appear first in General.
+- **Consistent pages.** Music, Weather, Tray and the other app pages share the same dimensions. System fits those dimensions with three equally spaced rows in each upper column and four matching CPU, Memory, Disk and Battery rings below. The Tray selector stays visible without baskets; the dock shows extra controls between apps and Settings only when needed.
+- **A quicker Mirror.** Camera discovery and setup move off the UI thread, and Mirror reuses its session across visits. It starts without the fixed delay, waits for real video before showing the preview and handles camera interruptions.
+- **A simpler Music dock.** The connected-device button is removed. Apple Music keeps its playlist button; other players leave no extra capsule or gap.
+- **Tighter Poster lyrics.** Short trailing phrases stay beside the headline instead of being pushed to the far side of the player.
