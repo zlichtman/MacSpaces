@@ -1,0 +1,40 @@
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Archives
+*.zip
+*.dmg
+Releases/
+
+# Signing material and local configuration
+*.cer
+*.p12
+*.provisionprofile
+*.mobileprovision
+.env
+.env.*
+!.env.example
+
+# Local demo clips (real songs, lyrics or artwork): never committed
+Demos/stash/
+
+# Ignore iCloud conflict copies of the generated app plist.
+/Sources/Resources/Info *.plist
+
+# Download counts of deleted releases (Scripts/ship.sh): the only record, never delete it
+/downloads.tsv

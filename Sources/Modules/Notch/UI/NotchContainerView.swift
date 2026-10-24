@@ -1,0 +1,574 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// Root view hosted in the notch window. Renders the black notch-shaped
+/// surface and morphs between the collapsed strip and the expanded nook.
+struct NotchContainerView: View {
+    @ObservedObject var viewModel: NotchViewModel
+    @ObservedObject var settings: NookSettings
+    // Expanded pages observe their own services; the shell observes geometry only.
+    let nowPlaying: NowPlayingController
+    let powerMonitor: PowerSourceMonitor
+    let timerService: TimerService
+    let systemActivityMonitor: SystemActivityMonitor
+    @State private var decorativeMotionReady = false
+    @ObservedObject private var theme = ThemeStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(viewModel: NotchViewModel) {
+        self.viewModel = viewModel
+        self.settings = viewModel.settings
+        self.nowPlaying = viewModel.nowPlaying
+        self.powerMonitor = viewModel.powerMonitor
+        self.timerService = viewModel.timerService
+        self.systemActivityMonitor = viewModel.systemActivityMonitor
+    }
+
+    private var isExpanded: Bool { viewModel.state == .expanded }
+    /// The open Nook is a see-through pane (Glass themes); the closed notch stays solid.
+    private var isGlass: Bool { isExpanded && theme.family.glassTint != nil }
+
+    /// A file dragged near the closed notch: the notch swells into a target.
+    private var isFileDragTarget: Bool { !isExpanded && viewModel.isDropTargeted }
+
+    private var surfaceSize: CGSize {
+        if isExpanded { return viewModel.expandedPanelSize }
+        let collapsed = viewModel.collapsedSize
+        // Stays inside the drag-activation margin (+60 × +28) around the notch.
+        if isFileDragTarget {
+            return theme.reduceMotion ? collapsed
+                : CGSize(width: collapsed.width + 56, height: collapsed.height + 22)
+        }
+        // A small hover peek below and beside the camera housing signals
+        // that the notch is interactive before it opens.
+        guard viewModel.isHoveringCollapsed, !theme.reduceMotion else { return collapsed }
+        return CGSize(width: collapsed.width + 12, height: collapsed.height + 4)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: NotchViewModel.dockGap) {
+                notchSurface
+                if isExpanded {
+                    NotchHeaderView(viewModel: viewModel)
+                        .frame(width: viewModel.expandedSize.width - 16,
+                               height: NotchViewModel.dockHeight)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .contentShape(Rectangle())
+            .onHover { viewModel.hoverChanged($0) }
+            .offset(x: isExpanded ? 0 : viewModel.collapsedContentOffset)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task(id: isExpanded) {
+            decorativeMotionReady = false
+            guard isExpanded else { return }
+            // The shell opens first. Timelines/shaders do not compete with its spring.
+            do { try await Task.sleep(nanoseconds: 420_000_000) } catch { return }
+            guard !Task.isCancelled else { return }
+            var transaction = Transaction(); transaction.disablesAnimations = true
+            withTransaction(transaction) { decorativeMotionReady = true }
+        }
+        .environment(\.colorScheme, theme.notch.colorScheme)
+        .environment(\.mirrorPresentationOwnerID, viewModel.cameraPresentationID)
+        .tint(theme.notch.accent)
+        .foregroundStyle(theme.nookForeground)
+    }
+
+    private var notchSurface: some View {
+        ZStack(alignment: .top) {
+            NookBackdrop(shape: NotchShape(topCornerRadius: isExpanded ? 12 : 6,
+                                           bottomCornerRadius: isExpanded ? Design.nookRadius : 10,
+                                           roundsTopInward: isExpanded),
+                         allowsGlass: isExpanded)
+                .overlay {
+                    if !isGlass {
+                        // A plain gradient, clipped below with everything else. Filling the
+                        // animating shape with it made Core Graphics redraw the gradient
+                        // on the main thread every frame of opening and closing (~36 ms each).
+                        LinearGradient(colors: [theme.notch.surfaceSecondary, .clear],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    }
+                }
+                .overlay {
+                    if let motif = theme.activeMotif {
+                        ThemeMotifView(motif: motif, accent: theme.notch.accent, ink: theme.nookForeground,
+                                       animated: isExpanded && decorativeMotionReady && !reduceMotion && !theme.reduceMotion)
+                            .opacity(isExpanded ? 1 : 0)
+                            .transition(.opacity)
+                    }
+                }
+                .overlay {
+                    if isExpanded && viewModel.selectedTab == .music {
+                        MusicArtworkAmbience(nowPlaying: nowPlaying)
+                            .transition(.opacity)
+                    }
+                }
+                .overlay {
+                    let edgeWidth: CGFloat = isExpanded ? 1 : 2
+                    NotchEdgeShape(
+                        topCornerRadius: isExpanded ? 12 : 6,
+                        bottomCornerRadius: isExpanded
+                            ? Design.nookRadius
+                            : 10,
+                        roundsTopInward: isExpanded
+                    )
+                        .stroke(
+                            Color.white.opacity(
+                                isGlass
+                                    ? (theme.notch.colorScheme == .dark ? 0.24 : 0.6)
+                                    : isExpanded ? 0.10 : 0.07
+                            ),
+                            style: StrokeStyle(
+                                lineWidth: edgeWidth,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                        .padding(edgeWidth / 2)
+                }
+                .clipShape(NotchShape(topCornerRadius: isExpanded ? 12 : 6,
+                                      bottomCornerRadius: isExpanded ? Design.nookRadius : 10,
+                                      roundsTopInward: isExpanded))
+                .padding(.top, isExpanded && viewModel.geometry.isHardwareNotch
+                         ? viewModel.geometry.height + NotchViewModel.cameraGap : 0)
+                .overlay(alignment: .bottom) {
+                    if isFileDragTarget {
+                        FileDropTargetLabel(accent: theme.notch.accent)
+                            .padding(.bottom, 5)
+                            .transition(.nookDepth(blur: 3, scale: 0.9, anchor: .bottom))
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if isExpanded {
+                        // Content settles in from the camera as the surface
+                        // opens, instead of fading in place over the morph.
+                        expandedContent
+                            .transition(.nookDepth(blur: 0))
+                    } else {
+                        CollapsedNotchContent(viewModel: viewModel)
+                            .transition(.opacity)
+                    }
+                }
+                .clipShape(NotchShape(topCornerRadius: isExpanded ? 12 : 6,
+                                      bottomCornerRadius: isExpanded ? Design.nookRadius : 10, roundsTopInward: isExpanded))
+        }
+        .frame(width: surfaceSize.width, height: surfaceSize.height)
+        .overlay {
+            // Accent rim and glow while a file hovers over the closed notch.
+            NotchEdgeShape(topCornerRadius: 6, bottomCornerRadius: 10)
+                .stroke(theme.notch.accent.opacity(isFileDragTarget ? 0.9 : 0), lineWidth: 1.5)
+                .shadow(color: theme.notch.accent.opacity(isFileDragTarget ? 0.55 : 0), radius: 12)
+                .allowsHitTesting(false)
+        }
+        // A shadow would show through a Glass pane and darken it.
+        .shadow(color: theme.notch.shadow.opacity(isExpanded && !isGlass ? 1 : 0), radius: 22, y: 8)
+        .background {
+            if !isExpanded {
+                ScrollWheelCatcher(
+                    onScroll: { deltaX, deltaY in
+                        viewModel.handleScroll(deltaX: deltaX, deltaY: deltaY)
+                    },
+                    onEnded: { viewModel.scrollEnded() }
+                )
+            }
+        }
+        .onTapGesture {
+            if !isExpanded { viewModel.expand() }
+        }
+        .onDrop(of: [UTType.fileURL], delegate: NotchDropDelegate(viewModel: viewModel))
+        .animation(isExpanded ? Design.openAnimation : Design.closeAnimation, value: isExpanded)
+        .animation(Design.hoverAnimation, value: viewModel.isHoveringCollapsed)
+        .animation(Design.dropAnimation, value: isFileDragTarget)
+        .environment(\.colorScheme, theme.notch.colorScheme)
+        .tint(theme.notch.accent)
+        .foregroundStyle(theme.nookForeground)
+    }
+
+    // MARK: - Expanded
+
+    private var expandedContent: some View {
+        // Keep only physical camera clearance above the content. Navigation
+        // lives below the panel, so no extra header padding is needed.
+        let topInset = viewModel.expandedHeaderTopInset
+        let horizontalInset: CGFloat = 20
+        let bottomInset: CGFloat = 12
+
+        return VStack(spacing: 8) {
+            Group {
+                switch viewModel.selectedTab {
+                case .nook:
+                    NookDashboardView(viewModel: viewModel)
+                        .transition(.nookDepth(blur: 0, scale: 0.98, anchor: .center))
+                case .music:
+                    MediaPlayerView(nowPlaying: nowPlaying, largeArtwork: true,
+                                    lyricsService: viewModel.teleprompter)
+                case .calendar:
+                    CalendarAppView(service: AppServices.shared.calendar)
+                case .notes:
+                    NotesAppView(service: AppServices.shared.notes)
+                case .weather:
+                    WeatherAppView(service: AppServices.shared.weather)
+                case .tray:
+                    TrayPageView(tray: viewModel.shelf, isDropTargeted: $viewModel.isDropTargeted)
+                        .transition(.nookDepth(blur: 0, scale: 0.98, anchor: .center))
+                case .reminders:
+                    RemindersAppView(service: AppServices.shared.calendar,
+                                     onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .timers:
+                    TimersAppView(service: timerService)
+                case .clipboard:
+                    ClipboardAppView(monitor: AppServices.shared.clipboard,
+                                     onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .system:
+                    SystemAppView(stats: AppServices.shared.systemStats, power: powerMonitor,
+                                  bluetooth: viewModel.bluetoothMonitor, keepAwake: AppServices.shared.keepAwake,
+                                  onDetailsChanged: { viewModel.isDeviceDetailsPresented = $0 })
+                case .terminal:
+                    TerminalPage(shell: AppServices.shared.quickShell,
+                                 onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .shortcuts:
+                    ShortcutsAppView(service: AppServices.shared.shortcuts,
+                                     onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .prompter:
+                    PrompterPage(prompter: .shared, onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .mirror:
+                    MirrorAppView()
+                case .clock:
+                    ClockPage(onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .meetings:
+                    MeetingControlsView(model: .shared)
+                case .dictation:
+                    DictationView(model: .shared, onEditingChanged: { viewModel.isPageEditing = $0 })
+                case .messages:
+                    MessagesPage(service: AppServices.shared.messages,
+                                 onEditingChanged: { viewModel.isPageEditing = $0 })
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A page opened from a Home tile grows out of that tile; going back fades.
+            .id(viewModel.selectedTab)
+            .transition(viewModel.selectedTab == .nook || viewModel.pageAnchor == .center ? .opacity
+                        : .asymmetric(insertion: .scale(scale: 0.4, anchor: viewModel.pageAnchor).combined(with: .opacity),
+                                      removal: .opacity))
+
+            if viewModel.selectedTab == .nook {
+                if settings.widgets.contains(.notifications) {
+                    removableQuickBar(.notifications) {
+                        MessagesWidget(onEditingChanged: { viewModel.isQuickReplyEditing = $0 })
+                    }
+                }
+            }
+
+        }
+        .frame(
+            width: max(0, viewModel.expandedSize.width - 2 * horizontalInset),
+            height: max(0, viewModel.expandedPanelSize.height - topInset - bottomInset)
+        )
+        .padding(.top, topInset)
+        .colorScheme(theme.notch.colorScheme)
+    }
+    private func removableQuickBar<Content: View>(
+        _ kind: NookWidgetKind, @ViewBuilder content: () -> Content
+    ) -> some View {
+        content().quickActionBar()
+            .overlay {
+                WidgetContextMenuOverlay(items: [
+                    WidgetContextMenuItem(title: "Remove \(kind.title)", systemImage: "trash") {
+                        removeQuickBar(kind)
+                    }
+                ])
+            }
+            .accessibilityAction(named: Text("Remove \(kind.title)")) {
+                removeQuickBar(kind)
+            }
+    }
+
+    private func removeQuickBar(_ kind: NookWidgetKind) {
+        if kind == .notifications { viewModel.isQuickReplyEditing = false }
+        settings.setEnabled(false, for: kind)
+    }
+
+}
+
+/// Expands the shelf when a drag hovers over the collapsed notch.
+private struct NotchDropDelegate: DropDelegate {
+    let viewModel: NotchViewModel
+
+    /// With drag-to-open off, the closed notch ignores file drags entirely.
+    func validateDrop(info: DropInfo) -> Bool {
+        viewModel.state == .expanded || viewModel.settings.openTrayOnFileDrag
+    }
+
+    func dropEntered(info: DropInfo) {
+        viewModel.fileDragEntered()
+    }
+
+    func dropExited(info: DropInfo) {
+        viewModel.fileDragExited()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        viewModel.isDropTargeted = false
+        Haptics.drop()
+        viewModel.expand(to: .tray)
+        return viewModel.shelf.handleDrop(providers: info.itemProviders(for: [.fileURL]))
+    }
+}
+
+/// "Drop to Tray" under the camera while a file hovers over the closed notch;
+/// the arrow bobs so the notch reads as something that will catch the file.
+private struct FileDropTargetLabel: View {
+    let accent: Color
+    @ObservedObject private var theme = ThemeStore.shared
+    @State private var bob = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 9, weight: .bold))
+                .offset(y: bob && !theme.reduceMotion ? 1.5 : -1.5)
+            Text("Drop to Tray")
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(accent)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) { bob = true }
+        }
+        .accessibilityLabel("Drop files to add them to the Tray")
+    }
+}
+
+/// The widest closed-notch lane's content, reported up to size both lanes.
+private struct LaneWidthKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: max)
+    }
+}
+
+private struct FittedLane: ViewModifier {
+    let outerEdge: Edge.Set
+    let side: String
+
+    func body(content: Content) -> some View {
+        content.fixedSize()
+            .padding(outerEdge, 10)
+            .padding(outerEdge == .leading ? .trailing : .leading, 4)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: LaneWidthKey.self, value: [side: proxy.size.height > 0 ? proxy.size.width : 0])
+                }
+            }
+    }
+}
+
+/// Live subscriptions stop at the closed lanes, instead of invalidating the opening shell.
+private struct CollapsedNotchContent: View {
+    @ObservedObject var viewModel: NotchViewModel
+    @ObservedObject var settings: NookSettings
+    // Observed here so collapsed-state live activities refresh with the data.
+    @ObservedObject var nowPlaying: NowPlayingController
+    @ObservedObject var powerMonitor: PowerSourceMonitor
+    @ObservedObject var timerService: TimerService
+    @ObservedObject var systemActivityMonitor: SystemActivityMonitor
+    @ObservedObject private var messageActivity = MessageActivityState.shared
+    @ObservedObject private var pasteQueue = PasteQueueState.shared
+    @ObservedObject private var meetings = MeetingCountdown.shared
+    @ObservedObject private var screenshots = ScreenshotWatcher.shared
+    @ObservedObject private var secondTimer = AppServices.shared.extraTimers[0]
+    @ObservedObject private var thirdTimer = AppServices.shared.extraTimers[1]
+
+    /// Every running timer, soonest first ("9:49  14:38  24:39").
+    private var timerLabel: String { NotchViewModel.timerLabel }
+    private var runningTimers: [TimerService] { NotchViewModel.runningTimers }
+    @ObservedObject private var theme = ThemeStore.shared
+    private var isFileDragTarget: Bool { viewModel.isDropTargeted }
+    init(viewModel: NotchViewModel) {
+        self.viewModel = viewModel
+        self.settings = viewModel.settings
+        self.nowPlaying = viewModel.nowPlaying
+        self.powerMonitor = viewModel.powerMonitor
+        self.timerService = viewModel.timerService
+        self.systemActivityMonitor = viewModel.systemActivityMonitor
+    }
+    // MARK: - Collapsed
+
+    /// Independently fitted lanes keep activities close to the physical camera.
+    /// The window stays centered; only the compact surface shifts to fit its sides.
+    var body: some View {
+        let activities = isFileDragTarget ? [] : viewModel.collapsedActivityKinds
+
+        // Each side fits its own content; the surface offset keeps the camera centered.
+        return HStack(spacing: 0) {
+            Group {
+                if activities.count > 1, let activity = stackedLeftActivity(in: activities) {
+                    pairedActivity(activity)
+                } else if let activity = activities.first {
+                    leftActivity(activity)
+                }
+            }
+            .modifier(FittedLane(outerEdge: .leading, side: "left"))
+            .frame(width: viewModel.collapsedLeftLaneWidth, alignment: .trailing)
+
+            Color.clear.frame(width: viewModel.geometry.width)
+
+            Group {
+                if activities.count > 1, let activity = stackedRightActivity(in: activities) {
+                    pairedActivity(activity)
+                } else if let activity = activities.first {
+                    rightActivity(activity)
+                }
+            }
+            .modifier(FittedLane(outerEdge: .trailing, side: "right"))
+            .frame(width: viewModel.collapsedRightLaneWidth, alignment: .leading)
+        }
+        .frame(width: viewModel.collapsedSize.width, height: viewModel.collapsedSize.height)
+        .onPreferenceChange(LaneWidthKey.self) { width in
+            let fitted = width.mapValues { ceil($0) }
+            if viewModel.measuredActivityLanes != fitted { viewModel.measuredActivityLanes = fitted }
+        }
+    }
+
+    private func stackedLeftActivity(
+        in activities: [CollapsedActivityKind]
+    ) -> CollapsedActivityKind? {
+        if activities.contains(.timer) {
+            return .timer
+        }
+        // Music is the strongest right-side treatment (artwork + waveform).
+        // Put any companion on the left so both activities remain visible.
+        if activities.contains(.music) {
+            return activities.first { $0 != .music } ?? .music
+        }
+        return activities.first
+    }
+
+    private func stackedRightActivity(
+        in activities: [CollapsedActivityKind]
+    ) -> CollapsedActivityKind? {
+        if activities.contains(.music) {
+            return .music
+        }
+        let left = stackedLeftActivity(in: activities)
+        return activities.first { $0 != left }
+    }
+
+    @ViewBuilder
+    private func pairedActivity(_ activity: CollapsedActivityKind) -> some View {
+        switch activity {
+        case .power:
+            HStack(spacing: 5) {
+                PowerActivityGaugeView(monitor: powerMonitor)
+                PowerActivityLevelView(monitor: powerMonitor)
+            }
+        default:
+            HStack(spacing: 5) {
+                leftActivity(activity)
+                rightActivity(activity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func leftActivity(_ activity: CollapsedActivityKind) -> some View {
+        switch activity {
+        case .message:
+            Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(theme.notch.accent)
+        case .screenshot:
+            if let image = screenshots.recentImage {
+                Image(nsImage: image).resizable().scaledToFill()
+                    .frame(width: 30, height: 20).clipShape(RoundedRectangle(cornerRadius: 4))
+                    .accessibilityLabel("New screenshot")
+            } else {
+                Image(systemName: "camera.viewfinder").font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.notch.accent)
+            }
+        case .meeting:
+            Image(systemName: "video.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.notch.accent)
+        case .pasteQueue:
+            Image(systemName: "list.clipboard.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.notch.accent)
+        case .timer:
+            Image(systemName: "timer")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(runningTimers.first?.tint ?? .orange)
+        case .music:
+            MusicActivityArtworkView(nowPlaying: viewModel.nowPlaying)
+        case .power:
+            PowerActivityGaugeView(monitor: viewModel.powerMonitor)
+        case .system:
+            if let activity = systemActivityMonitor.currentActivity {
+                NotchActivityGlyphView(
+                    systemImage: activity.systemImage,
+                    tint: systemActivityColor(activity)
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rightActivity(_ activity: CollapsedActivityKind) -> some View {
+        switch activity {
+        case .message:
+            Text("\(messageActivity.count)").font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.notch.accent).accessibilityLabel("\(messageActivity.count) incoming messages")
+        case .screenshot:
+            Text("In Tray").font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(theme.notch.accent)
+        case .meeting:
+            if let meeting = meetings.meeting {
+                TimelineView(.periodic(from: .now, by: 15)) { context in
+                    Text(MeetingCountdown.label(for: meeting, at: context.date))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(theme.notch.accent)
+                }
+                .accessibilityLabel("\(meeting.title), \(MeetingCountdown.label(for: meeting, at: Date()))")
+            }
+        case .pasteQueue:
+            // A count only: clip contents never show in the closed Nook.
+            Text("\(pasteQueue.remaining)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(theme.notch.accent)
+                .accessibilityLabel("\(pasteQueue.remaining) clips left to paste")
+        case .timer:
+            // Each time in its timer's colour, so they're told apart at a glance.
+            HStack(spacing: 6) {
+                if runningTimers.isEmpty {
+                    Text(timerLabel).foregroundStyle(.orange)
+                } else {
+                    ForEach(runningTimers, id: \.slot) { timer in
+                        Text(timer.remainingText).foregroundStyle(timer.tint)
+                            .lineLimit(1).fixedSize()
+                    }
+                }
+            }
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .accessibilityElement(children: .combine)
+        case .music:
+            AudioSpectrumView(isPlaying: nowPlaying.info.isPlaying)
+        case .power:
+            PowerActivityLevelView(monitor: powerMonitor)
+        case .system:
+            if let activity = systemActivityMonitor.currentActivity {
+                SystemActivityValueView(
+                    activity: activity,
+                    tint: systemActivityColor(activity)
+                )
+            }
+        }
+    }
+
+    private func systemActivityColor(_ activity: SystemLiveActivity) -> Color {
+        switch activity.kind {
+        case .microphone:
+            return activity.label == "Muted" ? .red : .green
+        case .focus:
+            return .purple
+        }
+    }
+
+}

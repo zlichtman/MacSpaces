@@ -1,0 +1,87 @@
+import AppKit
+import Foundation
+
+@main struct PlaybackChecks {
+    static func main() {
+        precondition(PlaybackValidation.seek(-2, duration: 100) == 0)
+        precondition(PlaybackValidation.seek(150, duration: 100) == 100)
+        precondition(PlaybackValidation.seek(32, duration: 100) == 32)
+        for duration in [0.0, -1, .nan, .infinity] {
+            precondition(PlaybackValidation.seek(1, duration: duration) == nil)
+        }
+        precondition(PlaybackValidation.seek(.nan, duration: 100) == nil)
+        precondition(PlaybackValidation.seek(.infinity, duration: 100) == nil)
+        var a = NowPlayingInfo()
+        a.title = "Track"
+        var b = a
+        b.capabilities = [.playPause]
+        precondition(a != b, "Capability changes must update the UI")
+        b = a; b.sourceName = "Spotify"
+        precondition(a != b, "Source changes must update the UI")
+        var cover = a; cover.artist = "Artist"; cover.album = "Album"; cover.sourceName = "Spotify"
+        var partial = cover; partial.album = ""; partial.sourceName = "System player"
+        precondition(cover.matchesArtworkTrack(partial), "Sparse system metadata should retain the same cover")
+        partial.artist = "Another artist"
+        precondition(!cover.matchesArtworkTrack(partial), "Never borrow artwork across artists")
+        partial = cover; partial.album = "Different album"
+        precondition(!cover.matchesArtworkTrack(partial), "Never borrow a different album cover")
+        partial = cover; partial.sourceName = "Music"
+        precondition(!cover.matchesArtworkTrack(partial), "Known different players remain separate")
+        // No player has been selected through a snapshot. A command must not
+        // fall back to another running app, and must not request Automation.
+        var rejectedUnselected = false
+        AppleScriptProvider().send(.togglePlayPause) { result in
+            if case .failure(.unavailable) = result { rejectedUnselected = true }
+        }
+        precondition(rejectedUnselected)
+        var rejectedBrowser = false
+        BrowserMediaProvider(transport: MediaRemoteProvider()).send(.nextTrack) { result in
+            if case .failure(.unavailable) = result { rejectedBrowser = true }
+        }
+        precondition(rejectedBrowser, "Browser commands must not target an unrelated system player")
+        // Covers looked up for players that give none: only an exact artist and album match counts.
+        let itunes = ArtworkLookup.candidates(.iTunes, ["results": [
+            ["artistName": "Ty Dolla $ign", "collectionName": "Here Come the Runts", "artworkUrl100": "https://example.com/wrong/100x100bb.jpg"],
+            ["artistName": "AWOLNATION", "collectionName": "Here Come the Runts (Deluxe Edition)", "artworkUrl100": "https://example.com/right/100x100bb.jpg"],
+        ]])
+        precondition(ArtworkLookup.pick(itunes, artist: "AWOLNATION", name: "Here Come The Runts")?.absoluteString
+                     == "https://example.com/right/600x600bb.jpg", "Matching artist and album, edition suffix ignored, at 600 px")
+        precondition(ArtworkLookup.pick(itunes, artist: "Kendrick Lamar", name: "Here Come the Runts") == nil,
+                     "Another artist's album with the same name is never used")
+        let deezer = ArtworkLookup.candidates(.deezer, ["data": [
+            ["title": "Here Come the Runts", "artist": ["name": "AWOLNATION"], "cover_xl": "https://example.com/dz.jpg"],
+        ]])
+        precondition(ArtworkLookup.pick(deezer, artist: "Awolnation", name: "here come the runts")?.absoluteString == "https://example.com/dz.jpg",
+                     "Deezer's album results match the same way")
+        let song = ArtworkLookup.candidates(.deezer, ["data": [["title": "Reptilia", "artist": ["name": "The Strokes"], "album": ["cover_xl": "https://example.com/r.jpg"]]]])
+        precondition(ArtworkLookup.pick(song, artist: "Strokes", name: "Reptilia") != nil, "Songs without an album match by title")
+        precondition(ArtworkLookup.normalized("Beyoncé & Jay-Z") == ArtworkLookup.normalized("beyonce and jayz"))
+        precondition(ArtworkLookup.searchURL(.deezer, artist: "A", album: "B", title: "C")?.absoluteString.contains("search/album") == true)
+        // Spotify's own cover: track IDs become oEmbed requests, and the 300 px thumbnail code maps to 640 px.
+        precondition(SpotifyCovers.oEmbedURL(trackID: "spotify:track:4uLU6hMCjMI75M1A2tKUQC")?.absoluteString
+                     == "https://open.spotify.com/oembed?url=spotify:track:4uLU6hMCjMI75M1A2tKUQC")
+        precondition(SpotifyCovers.oEmbedURL(trackID: "spotify:local:Artist:Album:Song:180") == nil, "Local files have no Spotify cover")
+        precondition(SpotifyCovers.largeCover("https://i.scdn.co/image/ab67616d00001e02abc")?.absoluteString == "https://i.scdn.co/image/ab67616d0000b273abc")
+        // One smooth clock: a reading that agrees with the estimate changes nothing; a
+        // seek, pause or new song does.
+        var playing = NowPlayingInfo(); playing.title = "Song"; playing.isPlaying = true; playing.elapsed = 10; playing.duration = 200
+        var reading = playing; reading.elapsed = 12.1
+        precondition(NowPlayingClock.agrees(reading, with: playing, estimate: 12), "Poll jitter does not move the clock")
+        reading.elapsed = 12.5
+        precondition(!NowPlayingClock.agrees(reading, with: playing, estimate: 12), "A seek in the player moves it")
+        reading = playing; reading.elapsed = 12; reading.isPlaying = false
+        precondition(!NowPlayingClock.agrees(reading, with: playing, estimate: 12), "Pausing publishes")
+        reading = playing; reading.elapsed = 12; reading.title = "Next"
+        precondition(!NowPlayingClock.agrees(reading, with: playing, estimate: 12), "A new song publishes")
+        // Polling slows when nothing on screen needs the position, and hurries for a missing cover.
+        precondition(NowPlayingClock.pollInterval(playing: true, watched: true) < NowPlayingClock.pollInterval(playing: true, watched: false))
+        precondition(NowPlayingClock.pollInterval(playing: true, watched: false) < NowPlayingClock.pollInterval(playing: false, watched: false))
+        precondition(NowPlayingClock.pollInterval(playing: false, watched: false, awaitingCover: true) <= 0.3)
+        // Reused polling scripts compile once and still run correctly.
+        let first = AppleScriptRunner.runSynchronously("return 6 * 7", reuse: true)
+        let second = AppleScriptRunner.runSynchronously("return 6 * 7", reuse: true)
+        precondition(!first.failed && first.descriptor?.int32Value == 42 && second.descriptor?.int32Value == 42)
+        precondition(abs(second.midpoint.timeIntervalSinceNow) < 5, "The read time is when the script ran")
+        print("Playback checks passed: seek bounds, non-finite values, source/capability updates, wrong-player prevention, artwork lookup matching, Spotify covers, clock anchoring and polling")
+    }
+}
