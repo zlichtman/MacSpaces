@@ -1,0 +1,49 @@
+# Settings changes since a release, each with how existing users keep what they had.
+# Scripts/check-settings-compat.sh compares this commit with the last release (the vX.Y tag) and
+# fails on any new key, removed key, changed default or removed stored value not listed here.
+# Columns, tab-separated: release compared against, kind (new, removed, default, value), key, migration.
+# Lines for older releases no longer match anything and can be deleted after shipping.
+3.34	new	dock.wispPageWithdrawn	Internal one-time flag for the Wisp withdrawal; never a user choice.
+3.34	default	NotchTab.defaultDock	Wisp leaves the starting dock: only new installs and an explicit Reset use it, since every existing install has dockApps stored (written on first launch). A dock that 3.31-3.34 gave Wisp on its own loses it once (dock.wispPageWithdrawn), unless wisp.enabled was stored true.
+3.34	default	agentActivity.peekWhileWorking	Restores the pre-3.30 behaviour (the bubble only while an agent needs you) for anyone who never set it; a stored value is kept.
+3.34	new	theme.custom.style	Custom's new style picker; unset means Solid, which is how 3.34's Custom drew, so a saved Custom opens unchanged (check-appearance).
+3.34	new	theme.custom.second	Second colour for the new Two-tone style; read only when style is Two-tone, which no existing user has.
+3.34	new	theme.custom.blur	Glass style setting for the new Custom Glass; Tinted Glass keeps its own keys, so nobody's glass changes.
+3.34	new	theme.custom.strength	Glass strength for the new Custom Glass only; existing themes never read it.
+3.34	new	theme.custom.image	The new Custom Picture's copied image; unset until someone picks a picture.
+3.34	new	theme.ghostty.selected	The chosen Ghostty theme; unset unless someone picks one, so every saved theme opens as before.
+3.36	default	CustomTheme.defaultSecond	Two-tone's new default pairing (7A3558). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomTheme.defaultStrength	Glass now starts as Smoke (50%). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomThemeColors.defaultAccent	Solid's new default accent (FFB077). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomThemeColors.defaultBackground	Solid's new default background (121A2B). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.background	Fallback is Solid's new default. Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.second	Fallback is Two-tone's new default. Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.blur	Same value as before (true), now read from Glass's defaults (Smoke blurs); the migration also writes it for existing Custom users.
+3.36	default	theme.custom.style	Unchanged (.solid); ThemeStore now reads it from its own defaults as well as CustomTheme.style.
+3.36	new	theme.custom.saved.solid	Solid's colours kept while another style shows; unset means Solid shows its default, and the migration writes it for anyone already using Solid.
+3.36	new	theme.custom.saved.twoTone	Two-tone's colours kept while another style shows; written by the migration for anyone using Two-tone or with a second colour stored.
+3.36	new	theme.custom.saved.glass	Glass's colours kept while another style shows; written by the migration for anyone using Glass or with a strength or blur stored.
+3.36	new	theme.custom.saved.image	Picture's colours kept while another style shows; written by the migration for anyone using Picture or with a picture stored.
+3.37	new	media.localFileCovers	Show covers and lyrics from your local music files; unset reads as off, so local Spotify songs keep the placeholder and no music folder is opened until someone turns it on.
+3.37	new	media.lyricNudges	Per-song lyric timing nudges set from the Music page lyric menu; unset means no nudge, so every song keeps the timing it had until someone moves it.
+3.38	new	media.lyricNudges	Per-song lyric timing nudges; empty unless someone nudges a song, so every song plays as before.
+3.41	new	media.localMusicFolder	The music folder chosen for Show covers and lyrics from your local music files; unset (every existing install) keeps reading the folders Spotify names for anyone who already has the switch on, exactly as before. Only turning the switch on afresh asks for a folder, and cancelling leaves it off.
+3.42	removed	wisp.speaks	The dock's Answer out loud button is gone and Wisp always answers out loud when spoken to; per Zach, saved choices are not kept.
+3.42	new	showKeepAwakeLiveActivity	Keep Awake beside the closed notch. Written once on launch: on for a new install (no dockApps stored yet), like a running timer; off for every existing install (dockApps is written on first launch), so nothing new appears beside their notch until someone turns it on.
+3.42	removed	dockApps:wisp	Wisp is held out of the product: its page is no longer offered and a saved dock drops it, at the owner's request.
+3.46	new	wisp.provider	What answers Wisp; defaults to Apple Intelligence, which is what answered before, so nothing changes until someone picks Claude, OpenAI or another service.
+3.46	new	wisp.compatible.address	The address for another service behind Wisp; empty by default and only read when that service is chosen.
+3.49	new	music.view	Which Music view is shown (Playing, Stats or Backups); starts on Playing, the player everyone had.
+3.49	new	music.statsArtists	Stats shows songs or artists; starts on songs. Only read once Spotify is connected.
+3.49	new	spotify.backupWeekly	Weekly Spotify backups; on by default, but nothing runs until someone connects their own Spotify app.
+3.49	new	spotify.clientID	The Client ID of the Spotify developer app someone connects; empty until they paste one.
+3.50	new	music.ascii	The Music page cover as ASCII art; off by default, so everyone keeps the artwork.
+3.50	new	music.ascii.style	ASCII art style; braille by default, only read once ASCII is on.
+3.50	new	music.ascii.scene	ASCII art scene; vinyl by default, only read once ASCII is on.
+3.50	new	music.ascii.detail	ASCII art detail; medium by default, only read once ASCII is on.
+3.53	new	music.ascii.colours	ASCII art colours; theme by default, as before.
+3.53	new	music.tint	The Music page tinted by the cover; on by default, as before.
+3.55	new	music.look	The Music page's look; standard by default, as before.
+3.60	value	AsciiColouring.white	The White, Red and Amber ASCII inks (3.60 only) are themes instead; a saved one reads as Theme.
+3.60	value	AsciiColouring.red	As AsciiColouring.white: reads as Theme.
+3.60	value	AsciiColouring.amber	As AsciiColouring.white: reads as Theme.

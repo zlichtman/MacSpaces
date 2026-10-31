@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to main replaces the commit, so an older run is no longer needed. A run
+# started by hand is replaced only by another of the same commit.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.sha }}
+  cancel-in-progress: true
+
+# The checks and a Debug arm64 build run as parallel jobs; the commit passes when both do.
+# The build job then runs the performance budget on that build.
+# (The release build is optimized, universal and verified by Scripts/package-release.sh.)
+jobs:
+  checks:
+    name: Regression checks
+    runs-on: macos-26
+    # Scripts/ci-step.sh: a failed step writes its cause to the summary and annotations.
+    defaults:
+      run:
+        shell: bash Scripts/ci-step.sh {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check single-release policy
+        run: ./Scripts/check-release-policy.sh
+
+      - name: Check settings compatibility with the last release
+        run: ./Scripts/check-settings-compat.sh
+
+      - name: Check updater revisions
+        run: ./Scripts/check-update-revisions.sh
+
+      - name: Check core lifecycle and action routing
+        run: ./Scripts/check-core.sh
+
+      - name: Check appearance migration and contrast
+        run: ./Scripts/check-appearance.sh
+
+      - name: Check playback capability and routing safety
+        run: ./Scripts/check-playback.sh
+
+      - name: Check lyric matching and timing
+        run: ./Scripts/check-lyrics.sh
+
+      - name: Check the globe, Match up and life in weeks
+        run: ./Scripts/check-clock.sh
+
+      - name: Check what Wisp understands
+        run: ./Scripts/check-wisp.sh
+
+      - name: Check agent hook installation
+        run: ./Scripts/check-agent-hooks.sh
+
+      - name: Check the notch and island geometry
+        run: ./Scripts/check-notch.sh
+      - name: Notes migration and conflicts
+        run: Scripts/check-notes.sh
+
+      - name: Rich clipboard and privacy
+        run: Scripts/check-clipboard.sh
+
+      - name: Transactional file tools and completed downloads
+        run: Scripts/check-file-tools.sh
+
+      - name: Calculator arithmetic and conversions
+        run: Scripts/check-calculator.sh
+
+      - name: Teleprompter voice following
+        run: Scripts/check-prompter.sh
+
+      - name: Coding statistics
+        run: Scripts/check-coding.sh
+
+      - name: Homebrew tab reading and commands
+        run: Scripts/check-homebrew.sh
+
+      - name: Settings search routing
+        run: Scripts/check-settings-search.sh
+
+      - name: Check desktop window behavior
+        run: ./Scripts/check-window.sh
+
+      - name: Privileged power helper contract
+        run: ./Scripts/check-power-helper.sh
+
+      - name: Timers in common modes, periodic timelines
+        run: ./Scripts/check-timers.sh
+
+  build:
+    name: Build MacSpaces
+    runs-on: macos-26
+    # Scripts/ci-step.sh: a failed step writes its cause to the summary and annotations.
+    defaults:
+      run:
+        shell: bash Scripts/ci-step.sh {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
+
+      # A Debug, Apple-silicon-only compile check with the CI compiler (owner, 2.100: fast
+      # CI). The release build (Scripts/package-release.sh) is optimized and universal.
+      # It's built as the Feature QA harness, so the performance budget can run on it.
+      - name: Build
+        run: >
+          xcodebuild
+          -project MacSpaces.xcodeproj
+          -scheme MacSpaces
+          -configuration Debug
+          -derivedDataPath build
+          -clonedSourcePackagesDirPath build/SourcePackages
+          -skipPackagePluginValidation
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+          PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.FeatureQA
+          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
+          build
+
+      # Report only, for now: the performance budget (`PerformanceBudget.Limit`: CPU of the
+      # closed and open notch, main-thread passes while hovering, opening, closing and
+      # switching pages, memory growth, idle publishes) on this build. Shared runners stall
+      # on their own, so it doesn't fail the commit until it has passed three times on
+      # unchanged main; until then an over-budget run is a warning to look at.
+      - name: Performance budget (report only)
+        continue-on-error: true
+        run: |
+          MACSPACES_FEATURE_QA="$RUNNER_TEMP/budget" MACSPACES_QA_SCOPE=budget \
+            perl -e 'alarm shift; exec @ARGV' 300 build/Build/Products/Debug/MacSpaces.app/Contents/MacOS/MacSpaces \
+            || echo "::warning::Over the performance budget; see this step's log"

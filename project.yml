@@ -1,0 +1,104 @@
+name: MacSpaces
+options:
+  minimumXcodeGenVersion: "2.38.0"
+  projectFormat: xcode15_0
+  xcodeVersion: "15.0"
+  bundleIdPrefix: dev.opensource
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.20.0
+
+targets:
+  MacSpaces:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes:
+          - "Resources/Info *.plist"
+      # The power helper's launchd plist, registered with SMAppService.daemon(plistName:).
+      - path: Helpers/PowerHelper/dev.opensource.MacSpaces.PowerHelper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - package: SwiftTerm
+      # Embedded at Contents/MacOS/MacSpacesPowerHelper (the plist's BundleProgram).
+      - target: MacSpacesPowerHelper
+        copy:
+          destination: executables
+    info:
+      path: Sources/Resources/Info.plist
+      properties:
+        CFBundleName: MacSpaces
+        CFBundleDisplayName: MacSpaces
+        CFBundleShortVersionString: "3.61"
+        CFBundleVersion: "162"
+        LSMinimumSystemVersion: "13.0"
+        LSUIElement: true
+        LSMultipleInstancesProhibited: true
+        NSMicrophoneUsageDescription: MacSpaces uses the microphone only when you start on-device dictation or voice-following teleprompter. Audio stays on your Mac.
+        NSSpeechRecognitionUsageDescription: MacSpaces recognises speech on this Mac for dictation and voice-following teleprompter; it never sends audio to a server.
+        NSCameraUsageDescription: MacSpaces uses the camera only for the Mirror page, so you can check yourself before a call.
+        NSCameraUseContinuityCameraDeviceType: true
+        NSCalendarsUsageDescription: MacSpaces shows your events in the Calendar page and widget and counts down to video meetings.
+        NSCalendarsFullAccessUsageDescription: MacSpaces shows your events in the Calendar page and widget and counts down to video meetings.
+        NSRemindersUsageDescription: MacSpaces shows and completes reminders in the Reminders widget.
+        NSRemindersFullAccessUsageDescription: MacSpaces shows and completes reminders in the Reminders widget.
+        NSLocationWhenInUseUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
+        NSLocationUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
+        NSBluetoothAlwaysUsageDescription: MacSpaces reads your already-paired Bluetooth devices to show their battery levels in the Battery widget. It does not scan for or track nearby devices.
+        NSAppleEventsUsageDescription: MacSpaces uses AppleScript for meeting controls, quick actions, Music playlist controls, and media metadata from Music, Spotify, or your active browser when system-wide media info is unavailable.
+        NSServices:
+          - NSMenuItem:
+              default: Add to MacSpaces Tray
+            NSMessage: addToTray
+            NSPortName: MacSpaces
+            NSSendTypes: [public.file-url]
+          - NSMenuItem:
+              default: MacSpaces File Tools
+            NSMessage: fileTools
+            NSPortName: MacSpaces
+            NSSendTypes: [public.file-url]
+        NSHumanReadableCopyright: MIT licensed open-source software.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces
+        ARCHS: "arm64 x86_64"
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_ENTITLEMENTS: Sources/Resources/MacSpaces.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
+        GENERATE_INFOPLIST_FILE: false
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # Privileged helper for "Agents keep running" (pmset disablesleep 0/1 over XPC).
+  MacSpacesPowerHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helpers/PowerHelper/main.swift
+      - path: Sources/Services/PowerHelperProtocol.swift
+    settings:
+      base:
+        PRODUCT_NAME: MacSpacesPowerHelper
+        PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces.PowerHelper
+        INFOPLIST_FILE: Helpers/PowerHelper/Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: true
+        GENERATE_INFOPLIST_FILE: false
+        SKIP_INSTALL: true
+        ARCHS: "arm64 x86_64"
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
+        OTHER_CODE_SIGN_FLAGS: "--identifier dev.opensource.MacSpaces.PowerHelper"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"

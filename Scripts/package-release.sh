@@ -1,0 +1,233 @@
+#!/bin/zsh
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PROJECT_ROOT/Sources/Resources/Info.plist")"
+RELEASES_DIR="$PROJECT_ROOT/Releases"
+STAGING_ROOT="$(mktemp -d "${TMPDIR%/}/macspaces-package.XXXXXX")"
+DERIVED_DATA="$STAGING_ROOT/DerivedData"
+PROJECT_BUILD_ROOT="$STAGING_ROOT/Project"
+APP_SOURCE="$DERIVED_DATA/Build/Products/Release/MacSpaces.app"
+APP_STAGED="$STAGING_ROOT/MacSpaces.app"
+DMG_STAGED="$STAGING_ROOT/MacSpaces.dmg"
+DMG_PATH="$RELEASES_DIR/MacSpaces.dmg"
+VERIFY_MOUNT="$STAGING_ROOT/verify-mount"
+ENTITLEMENTS_PATH="$PROJECT_ROOT/Sources/Resources/MacSpaces.entitlements"
+NOTARIZE="${MACSPACES_NOTARIZE:-0}"
+NOTARY_PROFILE="${MACSPACES_NOTARY_PROFILE:-MacSpaces}"
+
+cleanup() {
+  hdiutil detach "$VERIFY_MOUNT" >/dev/null 2>&1 || true
+  if [[ "${MACSPACES_KEEP_STAGING:-0}" == "1" ]]; then
+    echo "Preserved staging directory: $STAGING_ROOT"
+  else
+    rm -rf "$STAGING_ROOT"
+  fi
+}
+trap cleanup EXIT
+
+if [[ -x /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild ]]; then
+  XCODEBUILD=/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild
+elif [[ -x /Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild ]]; then
+  XCODEBUILD=/Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild
+else
+  XCODEBUILD="$(command -v xcodebuild)"
+fi
+
+mkdir -p "$RELEASES_DIR" "$PROJECT_BUILD_ROOT"
+ln -s "$PROJECT_ROOT/Sources" "$PROJECT_BUILD_ROOT/Sources"
+ln -s "$PROJECT_ROOT/Helpers" "$PROJECT_BUILD_ROOT/Helpers"
+
+cd "$PROJECT_ROOT"
+xcodegen generate \
+  --spec "$PROJECT_ROOT/project.yml" \
+  --project "$PROJECT_BUILD_ROOT" \
+  --project-root "$PROJECT_ROOT" \
+  --cache-path "$STAGING_ROOT/xcodegen-cache"
+
+"$XCODEBUILD" \
+  -quiet \
+  -project "$PROJECT_BUILD_ROOT/MacSpaces.xcodeproj" \
+  -scheme MacSpaces \
+  -configuration Release \
+  -destination 'generic/platform=macOS' \
+  -derivedDataPath "$DERIVED_DATA" \
+  -skipPackagePluginValidation \
+  ARCHS='arm64 x86_64' \
+  ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+
+ditto "$APP_SOURCE" "$APP_STAGED"
+
+# The privileged power helper (SMAppService daemon) and its launchd plist.
+HELPER_STAGED="$APP_STAGED/Contents/MacOS/MacSpacesPowerHelper"
+HELPER_IDENTIFIER="dev.opensource.MacSpaces.PowerHelper"
+HELPER_PLIST="$APP_STAGED/Contents/Library/LaunchDaemons/$HELPER_IDENTIFIER.plist"
+if [[ ! -x "$HELPER_STAGED" || ! -f "$HELPER_PLIST" ]]; then
+  echo "The power helper or its launchd plist is missing from the app." >&2
+  exit 1
+fi
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :BundleProgram' "$HELPER_PLIST")" != "Contents/MacOS/MacSpacesPowerHelper" ]]; then
+  echo "The power helper's BundleProgram doesn't point at Contents/MacOS/MacSpacesPowerHelper." >&2
+  exit 1
+fi
+
+SIGNING_IDENTITY="${MACSPACES_SIGNING_IDENTITY:-}"
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  AVAILABLE_IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+  SIGNING_IDENTITY="$(printf '%s\n' "$AVAILABLE_IDENTITIES" | awk -F'"' '/Developer ID Application:/ { print $2; exit }')"
+  if [[ -z "$SIGNING_IDENTITY" ]]; then
+    SIGNING_IDENTITY="$(printf '%s\n' "$AVAILABLE_IDENTITIES" | awk -F'"' '/Apple Development:/ { print $2; exit }')"
+  fi
+fi
+
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  SIGNING_ARGS=(
+    --force
+    --options runtime
+    --entitlements "$ENTITLEMENTS_PATH"
+    --sign "$SIGNING_IDENTITY"
+  )
+  if [[ "$SIGNING_IDENTITY" == Developer\ ID\ Application:* ]]; then
+    SIGNING_ARGS+=(--timestamp)
+    SIGNING_KIND="Developer ID Application"
+  else
+    SIGNING_ARGS+=(--timestamp=none)
+    SIGNING_KIND="Development"
+  fi
+  # Nested code first: the helper gets the hardened runtime and its own identifier,
+  # with no entitlements, then the app seals it.
+  HELPER_SIGNING_ARGS=(--force --options runtime --identifier "$HELPER_IDENTIFIER" --sign "$SIGNING_IDENTITY")
+  if [[ "$SIGNING_KIND" == "Developer ID Application" ]]; then
+    HELPER_SIGNING_ARGS+=(--timestamp)
+  else
+    HELPER_SIGNING_ARGS+=(--timestamp=none)
+  fi
+  codesign "${HELPER_SIGNING_ARGS[@]}" "$HELPER_STAGED"
+  codesign "${SIGNING_ARGS[@]}" "$APP_STAGED"
+  SIGNING_DESCRIPTION="$SIGNING_IDENTITY"
+else
+  codesign --force --options runtime --identifier "$HELPER_IDENTIFIER" --sign - --timestamp=none "$HELPER_STAGED"
+  codesign \
+    --force \
+    --options runtime \
+    --entitlements "$ENTITLEMENTS_PATH" \
+    --sign - \
+    --timestamp=none \
+    "$APP_STAGED"
+  SIGNING_DESCRIPTION="Ad-hoc (no keychain identity found)"
+  SIGNING_KIND="Ad-hoc"
+fi
+
+codesign --verify --deep --strict --verbose=2 "$APP_STAGED"
+codesign --verify --strict --verbose=2 "$HELPER_STAGED"
+HELPER_SIGNATURE="$(codesign -dvv "$HELPER_STAGED" 2>&1)"
+if [[ "$HELPER_SIGNATURE" != *"Identifier=$HELPER_IDENTIFIER"* || "$HELPER_SIGNATURE" != *"flags=0x10000(runtime)"* ]]; then
+  echo "The power helper isn't signed as $HELPER_IDENTIFIER with the hardened runtime:" >&2
+  echo "$HELPER_SIGNATURE" >&2
+  exit 1
+fi
+if [[ "$SIGNING_KIND" == "Developer ID Application" && "$HELPER_SIGNATURE" != *"TeamIdentifier=28LJG7MXT3"* ]]; then
+  echo "The power helper isn't signed by team 28LJG7MXT3." >&2
+  exit 1
+fi
+
+package_dmg() {
+  rm -f "$DMG_STAGED"
+  "$PROJECT_ROOT/Scripts/build-installer.sh" "$APP_STAGED" "$DMG_STAGED" "MacSpaces $VERSION"
+}
+
+NOTARIZATION_STATUS="Not submitted"
+if [[ "$NOTARIZE" == "1" ]]; then
+  if [[ "$SIGNING_KIND" != "Developer ID Application" ]]; then
+    echo "Notarization requires a Developer ID Application identity." >&2
+    exit 1
+  fi
+
+  NOTARY_ZIP="$STAGING_ROOT/MacSpaces-notary.zip"
+  ditto -c -k --sequesterRsrc --keepParent "$APP_STAGED" "$NOTARY_ZIP"
+  NOTARY_STARTED=$SECONDS
+  xcrun notarytool submit \
+    "$NOTARY_ZIP" \
+    --keychain-profile "$NOTARY_PROFILE" \
+    --wait \
+    --timeout 60m
+  echo "Notarized the app in $((SECONDS - NOTARY_STARTED)) s"
+  xcrun stapler staple "$APP_STAGED"
+  xcrun stapler validate "$APP_STAGED"
+  NOTARIZATION_STATUS="Accepted and stapled"
+fi
+
+package_dmg
+
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  DMG_SIGNING_ARGS=(--force --sign "$SIGNING_IDENTITY")
+  if [[ "$SIGNING_IDENTITY" == Developer\ ID\ Application:* ]]; then
+    DMG_SIGNING_ARGS+=(--timestamp)
+  else
+    DMG_SIGNING_ARGS+=(--timestamp=none)
+  fi
+  codesign "${DMG_SIGNING_ARGS[@]}" "$DMG_STAGED"
+else
+  codesign --force --sign - --timestamp=none "$DMG_STAGED"
+fi
+codesign --verify --strict --verbose=2 "$DMG_STAGED"
+
+# Verify the exact signed payload before publishing its disk image.
+for executable in MacSpaces MacSpacesPowerHelper; do
+  VERIFY_ARCHS="$(lipo -archs "$APP_STAGED/Contents/MacOS/$executable")"
+  if [[ "$VERIFY_ARCHS" != *arm64* || "$VERIFY_ARCHS" != *x86_64* ]]; then
+    echo "Packaged $executable is not universal: $VERIFY_ARCHS" >&2
+    exit 1
+  fi
+done
+
+if [[ "$NOTARIZE" == "1" ]]; then
+  NOTARY_STARTED=$SECONDS
+  xcrun notarytool submit \
+    "$DMG_STAGED" \
+    --keychain-profile "$NOTARY_PROFILE" \
+    --wait \
+    --timeout 60m
+  echo "Notarized the disk image in $((SECONDS - NOTARY_STARTED)) s"
+  xcrun stapler staple "$DMG_STAGED"
+  xcrun stapler validate "$DMG_STAGED"
+fi
+
+# A release is publishable only when the app survives an actual image
+# round-trip with its bundle signature and Apple Silicon architecture intact.
+mkdir -p "$VERIFY_MOUNT"
+hdiutil attach \
+  -nobrowse \
+  -readonly \
+  -mountpoint "$VERIFY_MOUNT" \
+  "$DMG_STAGED" \
+  >/dev/null
+codesign --verify --deep --strict --verbose=2 "$VERIFY_MOUNT/MacSpaces.app"
+if [[ "$NOTARIZE" == "1" ]]; then
+  xcrun stapler validate "$VERIFY_MOUNT/MacSpaces.app"
+  spctl --assess --type execute --verbose=2 "$VERIFY_MOUNT/MacSpaces.app"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_STAGED"
+fi
+MOUNTED_ARCHS="$(lipo -archs "$VERIFY_MOUNT/MacSpaces.app/Contents/MacOS/MacSpaces")"
+if [[ "$MOUNTED_ARCHS" != *arm64* || "$MOUNTED_ARCHS" != *x86_64* ]]; then
+  echo "Mounted executable is not universal: $MOUNTED_ARCHS" >&2
+  exit 1
+fi
+hdiutil detach "$VERIFY_MOUNT" >/dev/null
+
+# Publish only after build, signing, architecture, and optional notarization
+# checks have all completed. Releases intentionally contains one user-facing
+# artifact so Finder never presents stale or ambiguous downloads.
+rm -rf "$RELEASES_DIR/MacSpaces.app"
+rm -f \
+  "$RELEASES_DIR/.DS_Store" \
+  "$RELEASES_DIR/BUILD-INFO.txt" \
+  "$RELEASES_DIR/SHA256SUMS.txt"
+mv -f "$DMG_STAGED" "$DMG_PATH"
+
+echo "Created:"
+echo "  $DMG_PATH"
+echo "Signed with: $SIGNING_DESCRIPTION"
+echo "Notarization: $NOTARIZATION_STATUS"
