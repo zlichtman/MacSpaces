@@ -1,0 +1,278 @@
+name: Feature QA
+
+# The Debug feature harness on GitHub's Macs: regression checks, page captures and the
+# Blossom motion cost, with the captures uploaded. It needs windows on a screen, so it
+# runs here rather than on the owner's Mac. Run it by hand on a qa/ branch (a push alone
+# starts nothing), after Scripts/preflight.sh passes:
+#   gh workflow run feature-qa.yml --ref qa/<name> -f scopes="a b" -f clips=readme-hero
+# and afterwards remove the branch and every run with Scripts/qa-clean.sh qa/<name>.
+# It never runs for main, so ship.sh's CI wait is unaffected.
+on:
+  workflow_dispatch:
+    inputs:
+      scopes:
+        description: 'FeatureQA scopes, space-separated (each runs even when an earlier one fails); none for clips only'
+        default: 'review-regressions'
+      clips:
+        description: 'Website demo clips, comma-separated (e.g. readme-hero,page-tray); empty for none'
+        default: ''
+      tour:
+        description: 'Theme for the website tour video (e.g. nightBlossom); empty for none'
+        default: ''
+      agents:
+        description: 'Theme for the website Agents video (e.g. nightBlossom); empty for none'
+        default: ''
+      demo_theme:
+        description: 'MACSPACES_DEMO_THEME for the scopes (blossom: the site trio in Blossom); empty for none'
+        default: ''
+      render_scale:
+        description: 'MACSPACES_RENDER_SCALE for the scopes (2: 2x stills on the 1x runners); empty for the screen scale'
+        default: ''
+
+# No concurrency group: a dispatch is never cancelled by another one.
+jobs:
+  feature-qa:
+    name: Feature harness
+    runs-on: macos-26
+    # Scripts/ci-step.sh: a failed step writes its cause to the summary and annotations.
+    defaults:
+      run:
+        shell: bash Scripts/ci-step.sh {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
+
+      - name: Build the harness
+        id: harness
+        run: >
+          xcodebuild
+          -project MacSpaces.xcodeproj
+          -scheme MacSpaces
+          -configuration Debug
+          -derivedDataPath build
+          -clonedSourcePackagesDirPath build/SourcePackages
+          -skipPackagePluginValidation
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+          PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.FeatureQA
+          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
+          build
+
+      # Each scope runs the Debug regression checks first, then its captures; a failed check
+      # stops the app. Every scope runs (five minutes each at most), each gets a row in the
+      # summary with its cause, and the step fails at the end if any did.
+      - name: Run scopes
+        env:
+          SCOPES: ${{ inputs.scopes || 'review-regressions' }}
+          MACSPACES_DEMO_THEME: ${{ inputs.demo_theme }}
+          MACSPACES_RENDER_SCALE: ${{ inputs.render_scale }}
+          STEP_SUMMARY: self
+        run: |
+          app=build/Build/Products/Debug/MacSpaces.app/Contents/MacOS/MacSpaces
+          mkdir -p qa-output "$RUNNER_TEMP/scope-logs"
+          failed=()
+          { echo "### Feature QA scopes"; echo; echo "| Scope | Result | Cause |"; echo "|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          for scope in $SCOPES; do
+            [ "$scope" = none ] && continue
+            echo "::group::$scope"
+            log="$RUNNER_TEMP/scope-logs/$scope.log"
+            start=$SECONDS
+            set +e
+            MACSPACES_FEATURE_QA="$PWD/qa-output/$scope" MACSPACES_QA_SCOPE="$scope" \
+              perl -e 'alarm shift; exec @ARGV' 300 "$app" 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+            took="$((SECONDS - start)) s"
+            if [ "$status" = 0 ]; then
+              echo "| $scope | passed, $took | |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            failed+=("$scope")
+            if [ "$status" = 142 ]; then
+              why="Timed out after 300 s"
+            elif grep -qE "Fatal error|Precondition failed|Assertion failed|: error: " "$log" || [ "$status" -le 128 ]; then
+              why=$(bash Scripts/ci-step.sh --cause "$log")
+            else
+              # Died with no message: name the signal and, for the first such scope, run it
+              # again under lldb for the backtrace (the runner keeps no crash reports).
+              why="Crashed with SIG$(kill -l $((status - 128)))"
+              if [ -z "${traced:-}" ]; then
+                traced=1
+                echo "::group::$scope backtrace"
+                MACSPACES_FEATURE_QA="$RUNNER_TEMP/rerun" MACSPACES_QA_SCOPE="$scope" \
+                  perl -e 'alarm shift; exec @ARGV' 300 lldb --batch -o run -k "thread backtrace -c 40" -k "kill" \
+                  -- "$app" 2>&1 | grep -vE "^\s*$|^[0-9-]+ [0-9:.+]+ MacSpaces\[" | tail -60 | tee "$RUNNER_TEMP/backtrace.txt" || true
+                echo "::endgroup::"
+                frame=$(grep -m1 -E '`.* at [^ ]+\.swift:[0-9]+' "$RUNNER_TEMP/backtrace.txt" | sed -E 's/.*`(.*) at ([^ ]+\.swift:[0-9]+).*/\2 in \1/' || true)
+                [ -n "$frame" ] && why="$why at $frame"
+              fi
+            fi
+            echo "::error::Scope $scope: $why"
+            echo "| $scope | **failed** (exit $status), $took | ${why//|/\\|} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "Failed scopes: ${failed[*]}"
+            exit 1
+          fi
+
+      # Website and README stills (WebsiteDemoClips). Real songs' covers and details come
+      # from Apple's public iTunes Search at run time and are never committed.
+      - name: Website demo clips
+        # Runs even when a scope failed, so one crash doesn't cost the stills.
+        if: ${{ !cancelled() && steps.harness.outcome == 'success' && inputs.clips != '' }}
+        env:
+          CLIPS: ${{ inputs.clips }}
+        run: |
+          covers="$RUNNER_TEMP/covers"; mkdir -p "$covers" qa-output/site
+          python3 Scripts/demo/prepare-music.py Demos/music-sequence.json "$covers"
+          # The agents' App Store icons for the Agents tab (the runners have neither app).
+          icon() { # agent, App Store bundle id
+            url=$(curl -sf "https://itunes.apple.com/lookup?bundleId=$2" | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['artworkUrl512'].rsplit('/', 1)[0] + '/1024x1024bb.png')")
+            curl -sfL -o "$covers/$1.png" "$url"
+          }
+          icon claude com.anthropic.claude || true
+          icon codex com.openai.chat || true
+          # Start from the harness build (only the bundle ID differs), then always build: an incremental build relinks rather than recompiles.
+          [ -d build-demo ] || cp -Rc build build-demo 2>/dev/null || cp -R build build-demo
+          xcodebuild -project MacSpaces.xcodeproj -scheme MacSpaces -configuration Debug -derivedDataPath build-demo \
+            -clonedSourcePackagesDirPath build/SourcePackages -skipPackagePluginValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.WebsiteDemo \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build -quiet
+          TZ=America/Chicago MACSPACES_DEMO_FAST=1 MACSPACES_WEBSITE_DEMO=1 MACSPACES_DEMO_KIND=clips MACSPACES_DEMO_CLIPS="$CLIPS" \
+          MACSPACES_DEMO_OUTPUT="$PWD/qa-output/site" MACSPACES_DEMO_COVERS="$covers" MACSPACES_DEMO_TRACKS="$covers/tracks.json" \
+          MACSPACES_DEMO_AGENT_ICONS="$covers" MACSPACES_DEMO_SEQUENCE="$PWD/Demos/music-sequence.json" \
+            perl -e 'alarm shift; exec @ARGV' 900 build-demo/Build/Products/Debug/MacSpaces.app/Contents/MacOS/MacSpaces
+          # The Music video: encoded here (the site's MP4 and a near-lossless master), with its
+          # poster (a settled frame of the first song) and a frame sheet; the frames aren't kept.
+          if [ -d qa-output/site/clip-music-showcase ]; then
+            brew list ffmpeg > /dev/null 2>&1 || brew install ffmpeg > /dev/null
+            frames=qa-output/site/clip-music-showcase
+            ffmpeg -nostdin -loglevel error -y -framerate 30 -i "$frames/f%05d.png" -c:v libx264 -preset veryslow -crf 8 -pix_fmt yuv420p qa-output/site/music-master.mp4
+            ffmpeg -nostdin -loglevel error -y -framerate 30 -i "$frames/f%05d.png" -c:v libx264 -profile:v high -preset veryslow -tune animation -crf 24 \
+              -pix_fmt yuv420p -movflags +faststart qa-output/site/music.mp4
+            cp "$frames/f00110.png" qa-output/site/music-poster.png 2>/dev/null || cp "$(ls "$frames"/f*.png | tail -1)" qa-output/site/music-poster.png
+            ffmpeg -nostdin -loglevel error -y -framerate 30 -i "$frames/f%05d.png" -vf "fps=2,scale=410:-1,tile=4x7" -frames:v 1 qa-output/site/music-sheet.png
+            rm -rf "$frames"
+          fi
+          # Wisp's video: encoded like the Music one, with its last frame as the poster.
+          if [ -d qa-output/site/clip-wisp ]; then
+            brew list ffmpeg > /dev/null 2>&1 || brew install ffmpeg > /dev/null
+            frames=qa-output/site/clip-wisp
+            ffmpeg -nostdin -loglevel error -y -framerate 30 -i "$frames/f%05d.png" -c:v libx264 -profile:v high -preset veryslow -tune animation -crf 24 \
+              -pix_fmt yuv420p -movflags +faststart qa-output/site/wisp.mp4
+            cp "$(ls "$frames"/f*.png | tail -1)" qa-output/site/wisp-poster.png
+            rm -rf "$frames"
+          fi
+          # Keep only each clip's last (settled) frame, to keep the upload small.
+          for dir in qa-output/site/clip-page-* qa-output/site/clip-readme-* qa-output/site/clip-theme-*; do
+            [ -d "$dir" ] || continue
+            last=$(ls "$dir"/f*.png | tail -1); cp "$last" "qa-output/site/$(basename "$dir" | sed 's/^clip-//').png"; rm -rf "$dir"
+          done
+          rm -rf qa-output/site/clip-files
+
+      # The site's Tour video (WebsiteDemoNotch): frames taken at 60 fps in slowed time and
+      # encoded at 60, so it plays at the app's speed. Uploaded as the site's MP4, a
+      # near-lossless master for re-encoding, and the poster (the Music page with its lyric,
+      # one short line of the song).
+      - name: Website tour
+        if: ${{ !cancelled() && steps.harness.outcome == 'success' && inputs.tour != '' }}
+        env:
+          TOUR: ${{ inputs.tour }}
+        run: |
+          covers="$RUNNER_TEMP/tour-covers"; mkdir -p "$covers" qa-output/site
+          curl -sf "https://itunes.apple.com/search?term=generationals+put+a+light+on&entity=song&limit=1" > "$covers/track.json"
+          eval "$(python3 - "$covers/track.json" <<'PY'
+          import json, shlex, sys
+          r = json.load(open(sys.argv[1]))["results"][0]
+          for k, v in {"TITLE": r["trackName"], "ARTIST": r["artistName"], "ALBUM": r["collectionName"],
+                       "DURATION": str(r["trackTimeMillis"] / 1000),
+                       "ART": r["artworkUrl100"].replace("100x100bb", "600x600bb")}.items():
+              print(f"export TRACK_{k}={shlex.quote(v)}")
+          PY
+          )"
+          curl -sfL -o "$covers/cover.jpg" "$TRACK_ART"
+          # Start from the harness build (only the bundle ID differs), then always build: an incremental build relinks rather than recompiles.
+          [ -d build-demo ] || cp -Rc build build-demo 2>/dev/null || cp -R build build-demo
+          xcodebuild -project MacSpaces.xcodeproj -scheme MacSpaces -configuration Debug -derivedDataPath build-demo \
+            -clonedSourcePackagesDirPath build/SourcePackages -skipPackagePluginValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.WebsiteDemo \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build -quiet
+          asset="Theme$(python3 -c "import sys; t=sys.argv[1]; print(t[0].upper()+t[1:])" "$TOUR")"
+          TZ=America/Chicago MACSPACES_WEBSITE_DEMO=1 MACSPACES_DEMO_KIND=notch MACSPACES_DEMO_OUTPUT="$RUNNER_TEMP/tour" \
+          MACSPACES_DEMO_HERO_THEME="$TOUR" MACSPACES_DEMO_WALLPAPER_ASSET="$asset" MACSPACES_DEMO_LYRIC="the stars are way too bright" \
+          MACSPACES_DEMO_TRACK_TITLE="$TRACK_TITLE" MACSPACES_DEMO_TRACK_ARTIST="$TRACK_ARTIST" MACSPACES_DEMO_TRACK_ALBUM="$TRACK_ALBUM" \
+          MACSPACES_DEMO_TRACK_DURATION="$TRACK_DURATION" MACSPACES_DEMO_TRACK_COVER="$covers/cover.jpg" \
+            perl -e 'alarm shift; exec @ARGV' 1800 build-demo/Build/Products/Debug/MacSpaces.app/Contents/MacOS/MacSpaces
+          brew install ffmpeg > /dev/null
+          ffmpeg -nostdin -loglevel error -y -framerate 60 -i "$RUNNER_TEMP/tour/notch-frames/f%05d.png" \
+            -c:v libx264 -preset veryslow -crf 8 -pix_fmt yuv420p qa-output/site/notch-master.mp4
+          ffmpeg -nostdin -loglevel error -y -framerate 60 -i "$RUNNER_TEMP/tour/notch-frames/f%05d.png" \
+            -c:v libx264 -profile:v high -preset veryslow -tune animation -crf 26 -pix_fmt yuv420p -movflags +faststart \
+            qa-output/site/notch.mp4
+          cp "$RUNNER_TEMP/tour/notch-poster.png" qa-output/site/notch-poster.png
+
+      # The site's Agents video (WebsiteDemoAgents): the tour's stage, the agent bubble beside
+      # the closed notch, a click to the Agents tab and Allow. The song's cover and the agents'
+      # app icons (Claude's and ChatGPT's App Store artwork; the runners have neither app) are
+      # fetched from Apple's public iTunes lookup at run time and never committed.
+      - name: Website agents video
+        if: ${{ !cancelled() && steps.harness.outcome == 'success' && inputs.agents != '' }}
+        env:
+          AGENTS_THEME: ${{ inputs.agents }}
+        run: |
+          art="$RUNNER_TEMP/agents-art"; mkdir -p "$art" qa-output/site
+          curl -sf "https://itunes.apple.com/search?term=generationals+put+a+light+on&entity=song&limit=1" > "$art/track.json"
+          eval "$(python3 - "$art/track.json" <<'PY'
+          import json, shlex, sys
+          r = json.load(open(sys.argv[1]))["results"][0]
+          for k, v in {"TITLE": r["trackName"], "ARTIST": r["artistName"], "ALBUM": r["collectionName"],
+                       "DURATION": str(r["trackTimeMillis"] / 1000),
+                       "ART": r["artworkUrl100"].replace("100x100bb", "600x600bb")}.items():
+              print(f"export TRACK_{k}={shlex.quote(v)}")
+          PY
+          )"
+          curl -sfL -o "$art/cover.jpg" "$TRACK_ART"
+          icon() { # agent, App Store bundle id
+            url=$(curl -sf "https://itunes.apple.com/lookup?bundleId=$2" | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['artworkUrl512'].rsplit('/', 1)[0] + '/1024x1024bb.png')")
+            curl -sfL -o "$art/$1.png" "$url"
+          }
+          icon claude com.anthropic.claude
+          icon codex com.openai.chat
+          # Start from the harness build (only the bundle ID differs), then always build: an incremental build relinks rather than recompiles.
+          [ -d build-demo ] || cp -Rc build build-demo 2>/dev/null || cp -R build build-demo
+          xcodebuild -project MacSpaces.xcodeproj -scheme MacSpaces -configuration Debug -derivedDataPath build-demo \
+            -clonedSourcePackagesDirPath build/SourcePackages -skipPackagePluginValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES PRODUCT_BUNDLE_IDENTIFIER=dev.opensource.MacSpaces.WebsiteDemo \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build -quiet
+          asset="Theme$(python3 -c "import sys; t=sys.argv[1]; print(t[0].upper()+t[1:])" "$AGENTS_THEME")"
+          TZ=America/Chicago MACSPACES_WEBSITE_DEMO=1 MACSPACES_DEMO_KIND=agents MACSPACES_DEMO_OUTPUT="$RUNNER_TEMP/agents" \
+          MACSPACES_DEMO_HERO_THEME="$AGENTS_THEME" MACSPACES_DEMO_WALLPAPER_ASSET="$asset" MACSPACES_DEMO_AGENT_ICONS="$art" \
+          MACSPACES_DEMO_TRACK_TITLE="$TRACK_TITLE" MACSPACES_DEMO_TRACK_ARTIST="$TRACK_ARTIST" MACSPACES_DEMO_TRACK_ALBUM="$TRACK_ALBUM" \
+          MACSPACES_DEMO_TRACK_DURATION="$TRACK_DURATION" MACSPACES_DEMO_TRACK_COVER="$art/cover.jpg" \
+            perl -e 'alarm shift; exec @ARGV' 1800 build-demo/Build/Products/Debug/MacSpaces.app/Contents/MacOS/MacSpaces
+          brew list ffmpeg > /dev/null 2>&1 || brew install ffmpeg > /dev/null
+          ffmpeg -nostdin -loglevel error -y -framerate 60 -i "$RUNNER_TEMP/agents/agents-frames/f%05d.png" \
+            -c:v libx264 -preset veryslow -crf 8 -pix_fmt yuv420p qa-output/site/agents-master.mp4
+          ffmpeg -nostdin -loglevel error -y -framerate 60 -i "$RUNNER_TEMP/agents/agents-frames/f%05d.png" \
+            -c:v libx264 -profile:v high -preset veryslow -tune animation -crf 26 -pix_fmt yuv420p -movflags +faststart \
+            qa-output/site/agents.mp4
+          cp "$RUNNER_TEMP"/agents/agents-*.png qa-output/site/
+
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-qa
+          path: qa-output
+          retention-days: 7

@@ -1,0 +1,127 @@
+# Settings changes since a release, each with how existing users keep what they had.
+# Scripts/check-settings-compat.sh compares this commit with the last release (the vX.Y tag) and
+# fails on any new key, removed key, changed default or removed stored value not listed here.
+# Columns, tab-separated: release compared against, kind (new, removed, default, value), key, migration.
+# Lines for older releases no longer match anything and can be deleted after shipping.
+3.34	new	dock.wispPageWithdrawn	Internal one-time flag for the Wisp withdrawal; never a user choice.
+3.34	default	NotchTab.defaultDock	Wisp leaves the starting dock: only new installs and an explicit Reset use it, since every existing install has dockApps stored (written on first launch). A dock that 3.31-3.34 gave Wisp on its own loses it once (dock.wispPageWithdrawn), unless wisp.enabled was stored true.
+3.34	default	agentActivity.peekWhileWorking	Restores the pre-3.30 behaviour (the bubble only while an agent needs you) for anyone who never set it; a stored value is kept.
+3.34	new	theme.custom.style	Custom's new style picker; unset means Solid, which is how 3.34's Custom drew, so a saved Custom opens unchanged (check-appearance).
+3.34	new	theme.custom.second	Second colour for the new Two-tone style; read only when style is Two-tone, which no existing user has.
+3.34	new	theme.custom.blur	Glass style setting for the new Custom Glass; Tinted Glass keeps its own keys, so nobody's glass changes.
+3.34	new	theme.custom.strength	Glass strength for the new Custom Glass only; existing themes never read it.
+3.34	new	theme.custom.image	The new Custom Picture's copied image; unset until someone picks a picture.
+3.34	new	theme.ghostty.selected	The chosen Ghostty theme; unset unless someone picks one, so every saved theme opens as before.
+3.36	default	CustomTheme.defaultSecond	Two-tone's new default pairing (7A3558). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomTheme.defaultStrength	Glass now starts as Smoke (50%). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomThemeColors.defaultAccent	Solid's new default accent (FFB077). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	CustomThemeColors.defaultBackground	Solid's new default background (121A2B). Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.background	Fallback is Solid's new default. Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.second	Fallback is Two-tone's new default. Pinned before the new fallback applies: CustomTheme.migrateStyleDefaults writes the effective 3.36 value of every unset Custom key on first launch for anyone who used Custom (a Custom key stored or theme.family custom); check-appearance covers a 3.35 Glass and a 3.34 Solid. Only people who never used Custom see the new per-style default.
+3.36	default	theme.custom.blur	Same value as before (true), now read from Glass's defaults (Smoke blurs); the migration also writes it for existing Custom users.
+3.36	default	theme.custom.style	Unchanged (.solid); ThemeStore now reads it from its own defaults as well as CustomTheme.style.
+3.36	new	theme.custom.saved.solid	Solid's colours kept while another style shows; unset means Solid shows its default, and the migration writes it for anyone already using Solid.
+3.36	new	theme.custom.saved.twoTone	Two-tone's colours kept while another style shows; written by the migration for anyone using Two-tone or with a second colour stored.
+3.36	new	theme.custom.saved.glass	Glass's colours kept while another style shows; written by the migration for anyone using Glass or with a strength or blur stored.
+3.36	new	theme.custom.saved.image	Picture's colours kept while another style shows; written by the migration for anyone using Picture or with a picture stored.
+3.37	new	media.localFileCovers	Show covers and lyrics from your local music files; unset reads as off, so local Spotify songs keep the placeholder and no music folder is opened until someone turns it on.
+3.37	new	media.lyricNudges	Per-song lyric timing nudges set from the Music page lyric menu; unset means no nudge, so every song keeps the timing it had until someone moves it.
+3.38	new	media.lyricNudges	Per-song lyric timing nudges; empty unless someone nudges a song, so every song plays as before.
+3.41	new	media.localMusicFolder	The music folder chosen for Show covers and lyrics from your local music files; unset (every existing install) keeps reading the folders Spotify names for anyone who already has the switch on, exactly as before. Only turning the switch on afresh asks for a folder, and cancelling leaves it off.
+3.42	removed	wisp.speaks	The dock's Answer out loud button is gone and Wisp always answers out loud when spoken to; per Zach, saved choices are not kept.
+3.42	new	showKeepAwakeLiveActivity	Keep Awake beside the closed notch. Written once on launch: on for a new install (no dockApps stored yet), like a running timer; off for every existing install (dockApps is written on first launch), so nothing new appears beside their notch until someone turns it on.
+3.42	removed	dockApps:wisp	Wisp is held out of the product: its page is no longer offered and a saved dock drops it, at the owner's request.
+3.46	new	wisp.provider	What answers Wisp; defaults to Apple Intelligence, which is what answered before, so nothing changes until someone picks Claude, OpenAI or another service.
+3.46	new	wisp.compatible.address	The address for another service behind Wisp; empty by default and only read when that service is chosen.
+3.49	new	music.view	Which Music view is shown (Playing, Stats or Backups); starts on Playing, the player everyone had.
+3.49	new	music.statsArtists	Stats shows songs or artists; starts on songs. Only read once Spotify is connected.
+3.49	new	spotify.backupWeekly	Weekly Spotify backups; on by default, but nothing runs until someone connects their own Spotify app.
+3.49	new	spotify.clientID	The Client ID of the Spotify developer app someone connects; empty until they paste one.
+3.50	new	music.ascii	The Music page cover as ASCII art; off by default, so everyone keeps the artwork.
+3.50	new	music.ascii.style	ASCII art style; braille by default, only read once ASCII is on.
+3.50	new	music.ascii.scene	ASCII art scene; vinyl by default, only read once ASCII is on.
+3.50	new	music.ascii.detail	ASCII art detail; medium by default, only read once ASCII is on.
+3.53	new	music.ascii.colours	ASCII art colours; theme by default, as before.
+3.53	new	music.tint	The Music page tinted by the cover; on by default, as before.
+3.55	new	music.look	The Music page's look; standard by default, as before.
+3.60	value	AsciiColouring.white	The White, Red and Amber ASCII inks (3.60 only) are themes instead; a saved one reads as Theme.
+3.60	value	AsciiColouring.red	As AsciiColouring.white: reads as Theme.
+3.60	value	AsciiColouring.amber	As AsciiColouring.white: reads as Theme.
+3.64	value	LyricStyle.classic	Classic is removed at Zach's request (only Poster and the new Terminal style remain); a saved value reads as Poster, the fallback and default.
+3.64	value	LyricStyle.mood	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.choreography	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.stickers	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.karaoke	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.typewriter	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.cinema	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	value	LyricStyle.departure	As LyricStyle.classic: removed at Zach's request; reads as Poster.
+3.64	removed	theme.reduceMotion	The app's own Reduce motion switch is removed at Zach's request; motion follows only the system's Reduce Motion, so a stored on is not kept.
+3.64	removed	theme.haptics	Trackpad haptics are removed at Zach's request; a stored choice is not kept and no haptics play.
+3.65	new	music.ascii.around	What moves around the ASCII album art; unset reads as Off, which draws only the scene, as before.
+3.66	value	AsciiScene.horizon	Horizon moved from Scene to Around: a saved Horizon scene reads as Cover with Horizon around it.
+3.67	value	AsciiAround.horizon	Horizon is removed at Zach's request; a saved one reads as Off.
+3.68	removed	lyrics.style	Lyrics follow the look at Zach's request: Standard shows Poster, Terminal its own line; the saved choice is no longer read.
+3.71	removed	wisp.speaks	The last of the dead setting: since 3.42 nothing reads it and Wisp always answers out loud when spoken to, so a stored value changes nothing.
+3.71	new	focus.dndTurnedOn	Whether MacSpaces turned Focus on and owes the Off shortcut; unset reads as no, as before.
+3.71	value	widget.clock.style	The Clock has drawn only Regular since 3.15; the World Clock migration no longer writes dot and a stored dot or map no longer widens the tile.
+3.72	new	swipeToChangeSongs	Swiping sideways on the closed notch changes songs; off by default, so existing installs behave as before.
+3.72	new	timer.whenDone	What each timer does when done (also timer2.whenDone, timer3.whenDone); unset reads as Nothing, as before.
+3.74	new	showSpacesLiveActivity	The desktop's number and name beside the closed notch after a Space change; registered off, so existing installs behave as before.
+3.74	new	spaces.names	What the Spaces widget's user named each desktop, by Space uuid; unset reads as no names, and nothing is added to a saved Home.
+3.79	new	notch.popOutShapes	Each pop-out's shape in the clear look; unset reads as its default (the song a squircle, the rest circles), as before.
+3.79	new	settings.drawer.musicPlayer	Whether the Music Player settings card is open; only how the card shows, no setting changes.
+3.79	new	settings.drawer.popOuts	Whether the Pop-outs settings card is open; only how the card shows, no setting changes.
+3.79	new	weather.place	The Weather page's chosen place; unset reads as automatic, as before.
+3.80	new	timer.tint	Each timer's colour (also timer2…timer8); unset reads as the slot's own, so the first three look as they did.
+3.80	new	timer.showsInNotch	Whether a running timer shows beside the notch (also timer2…timer8); unset reads as yes, as before.
+3.80	new	timer.focus	Do Not Disturb while this timer runs (also timer2…timer8); unset reads as no, as before.
+3.80	new	timers.nextFocus	The Timers page's Focus chip, for the next timer; unset reads as off.
+3.80	new	timers.nextHidden	The Timers page's Notch chip, for the next timer; unset shows it, as before.
+3.80	removed	timers.count	Every running timer now shows on one page; a hidden running timer simply shows.
+3.80	removed	timers.pageFocus	The Timers page no longer has a Focus tab.
+3.80	removed	widget.pomodoro.focus	Focus is now a setting on any timer; a session running at update carries on as a timer.
+3.80	removed	widget.pomodoro.break	Breaks are now When done, Start a 5 min break.
+3.80	removed	focus.dnd	Do Not Disturb is now per timer; a running session keeps what it had.
+3.80	removed	focus.autoNext	Replaced by When done, Start a 5 min break.
+3.80	removed	focus.phaseRest	Read once to carry a running session over, then removed.
+3.80	removed	focus.remaining	Read once to carry a running session over, then removed.
+3.80	removed	focus.deadline	Read once to carry a running session over, then removed.
+3.80	removed	focus.completed	The focus sessions count is gone.
+3.80	removed	focus.day	The focus sessions count is gone.
+3.80	value	NookWidgetKind.pomodoro	A saved Focus widget on Home reads as the Timers widget, once in each profile.
+3.80	removed	settings.drawer.popOuts	Only whether a settings card was open; the card is now part of Closed notch.
+3.80	new	settings.drawer.closedNotch	Whether the Closed notch settings card is open; only how the card shows, no setting changes.
+3.80	new	settings.drawer.theme	Whether the Theme settings card is open; only how the card shows, no setting changes.
+3.80	default	notch.look	Solid is removed at Zach's request: the app is always Clear, whatever is stored.
+3.80	default	notch.notchlessHint	Off for new installs only: written once at launch with no dock stored; an existing install keeps its pill.
+3.80	default	NotchTab.defaultDock	The starter dock changes for new installs and an explicit Reset only; a saved dock stays as it is.
+3.82	removed	notch.look	The app has been Clear only since 3.81, whatever is stored; a stored value is simply no longer read.
+3.82	value	Look.*	Solid and Clear are gone with the look: nothing reads a stored value.
+3.83	new	theme.ghostty.edits	Colours changed on a Terminal theme, by theme; unset means themes keep their own colours, as before.
+3.83	new	theme.look	Terminal themes' shared see-through, blur, fade and picture; unset reads as solid with none, as before.
+3.83	new	theme.look.custom	Custom's look; unset reads from its saved style, so a saved Custom looks as it did.
+3.85	new	music.vinyl.colours	The Vinyl look's parts linked to other theme colours; unset means every part keeps the colour it had.
+3.85	new	timer.tintChoice	A timer's Theme, Clear, theme colour or chosen colour; unset keeps the colour it had (timer.tint).
+3.86	new	notch.bubblesFollowTheme	Everything beside the closed notch takes the theme's colour; unset means each keeps its own colour, as before.
+3.87	default	swipeToChangeSongs	On for new installs only: written once when no dock is stored yet, so an existing install keeps what it has; an explicit Reset uses it.
+3.87	removed	notch.bubblesFollowTheme	Becomes notch.popOutsFollowingTheme: on carries over as every bubble with its own colour.
+3.87	new	notch.popOutsFollowingTheme	The bubbles following the theme; unset or empty means each keeps its own colour, as before.
+3.87	default	notch.bubblesFollowTheme	No longer registered: removed for notch.popOutsFollowingTheme, with on carried over.
+3.90	new	notch.bubbleColoursSettled	Set once. An existing install gets the six bubbles that always wore the theme's colour added to notch.popOutsFollowingTheme, so they look as before; a new install starts with each bubble's own colour.
+3.92	new	tape.gap	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (8 pt).
+3.92	new	tape.edgeGap	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (8 pt).
+3.92	new	tape.centering	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (never).
+3.92	new	tape.reduceMotion	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (follows only the system).
+3.92	new	tape.layout.sharedWidths	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (off).
+3.92	new	tape.apps.policy	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (every app).
+3.92	new	tape.apps.paths	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (empty).
+3.92	new	tape.displays.disabled	Read only once Tape is on, which nobody has until they turn it on; unset is Tape's own default (none).
+3.92	new	tape.enabled	Off for everyone, new installs too: unset means Tape never starts.
+3.92	new	tape.imported	Set on the first switch-on, after copying the Tape app's settings once; nobody has it until then.
+3.92	new	tape.spaces.disabled	Empty means Tape runs on every desktop, as it did; read only once Tape is on.
+3.93	removed	settings.drawer.musicPlayer	Whether the Music Player card was open. It now has its own page and is always open; a stored value is simply no longer read.
+3.93	new	wisp.character	Unset is Wisp, as before; only choosing KemoSabe under Settings, Tsukumo sets it.
+3.94	new	kemosabe.shareFreeTimes	Unset is off: a cloud model learns nothing of your calendar, as before, until Share when you're free is turned on under Settings, Tsukumo, Gateway.
+3.95	new	kemosabe.look	Unset is Apricot, the orange KemoSabe 3.94 and 3.95 showed; only picking a look under Settings, Tsukumo sets it.
+3.95	value	WispCharacter.glass	"glass" (3.95's glass KemoSabe) becomes "kemosabe" with kemosabe.look "glass": the same picture (WispCharacter.migrateGlass).
+3.95	new	welcome.seen	Set at first launch for any copy that has run before (it already has settings), so only a new install opens the walkthrough by itself.
