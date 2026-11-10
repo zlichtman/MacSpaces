@@ -1,0 +1,29 @@
+SirenCosyVoice
+
+Swift port of CosyVoice 3 for Siren, vendored from soniqo/speech-swift
+(https://github.com/soniqo/speech-swift), Apache License 2.0, commit
+cbad3be29480825707890490f446b19d7288be2d (25 Oct 2026). Copyright the
+speech-swift authors. The full licence is in LICENSE.
+
+CosyVoice 3 itself is by FunAudioLLM (Alibaba Tongyi Lab), Apache License 2.0.
+The weights Siren downloads are aufklarer/CosyVoice3-0.5B-MLX-bf16 and
+aufklarer/CamPlusPlus-Speaker-CoreML on Hugging Face.
+
+Taken unchanged: Sources/AudioCommon, Sources/MLXCommon and
+Sources/CosyVoiceTTS, except as listed below.
+
+Changes made for Siren:
+- Package.swift is new: only these three targets, on mlx-swift 0.32.3 or
+  later (speech-swift pins mlx-swift below 0.32 through mlx-swift-lm).
+- CosyVoiceTTS/CamPlusPlusMelExtractor.swift: the per-frame mean subtraction
+  uses one buffer pointer that outlives each vDSP call, instead of
+  `&melSpec + base` (a pointer only valid inside the `+`).
+- Cancellation: the LLM token loop (LLM.swift), the flow-matching steps
+  (FlowMatching.swift), the long-form segment loop (VoiceCloning.swift) and
+  synthesis before the flow and before HiFi-GAN (CosyVoiceTTS.swift) stop
+  when the calling task is cancelled, so Stop ends GPU work promptly.
+- CosyVoiceTTS.swift: the speech-token budget is capped at 750 tokens (30 s
+  at 25 Hz) on top of the existing 10x-content scaling.
+- CamPlusPlusSpeaker.swift: `fromPretrained` takes the CoreML compute units
+  (default unchanged, `.cpuAndNeuralEngine`); Siren passes `.cpuOnly`, since
+  compiling the 15 MB encoder for the Neural Engine took about 97 s per launch.

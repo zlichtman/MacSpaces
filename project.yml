@@ -1,0 +1,181 @@
+name: MacSpaces
+options:
+  minimumXcodeGenVersion: "2.38.0"
+  projectFormat: xcode15_0
+  xcodeVersion: "15.0"
+  bundleIdPrefix: dev.opensource
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.20.0
+  # Voices from recordings (Siren's engine), used only by the MacSpacesVoiceHelper XPC service.
+  SirenQwen:
+    path: Packages/SirenQwen
+  SirenCosyVoice:
+    path: Packages/SirenCosyVoice
+  MLXAudio:
+    url: https://github.com/Blaizzy/mlx-audio-swift.git
+    revision: d8e2cafea891928075d3c8577b1a05b99396594e
+  # Held at the versions Siren ships with (Package.resolved isn't committed here).
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift.git
+    exactVersion: 0.32.3
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    exactVersion: 1.3.5
+  swift-huggingface:
+    url: https://github.com/huggingface/swift-huggingface.git
+    exactVersion: 0.13.0
+
+targets:
+  MacSpaces:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes:
+          - "Resources/Info *.plist"
+      # The power helper's launchd plist, registered with SMAppService.daemon(plistName:).
+      - path: Helpers/PowerHelper/dev.opensource.MacSpaces.PowerHelper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - package: SwiftTerm
+      # Embedded at Contents/MacOS/MacSpacesPowerHelper (the plist's BundleProgram).
+      - target: MacSpacesPowerHelper
+        copy:
+          destination: executables
+      # Embedded at Contents/XPCServices/MacSpacesVoiceHelper.xpc; started only for voices from recordings.
+      - target: MacSpacesVoiceHelper
+    info:
+      path: Sources/Resources/Info.plist
+      properties:
+        CFBundleName: MacSpaces
+        CFBundleDisplayName: MacSpaces
+        CFBundleShortVersionString: "4.25"
+        CFBundleVersion: "227"
+        LSMinimumSystemVersion: "13.0"
+        LSUIElement: true
+        LSMultipleInstancesProhibited: true
+        NSMicrophoneUsageDescription: MacSpaces uses the microphone only when you dictate, follow a script by voice, talk to the agent or record your voice in Studio. Audio stays on your Mac.
+        NSSpeechRecognitionUsageDescription: MacSpaces recognises speech on this Mac for dictation and voice-following teleprompter; it never sends audio to a server.
+        NSCameraUsageDescription: MacSpaces uses the camera only for the Mirror page, so you can check yourself before a call.
+        NSCameraUseContinuityCameraDeviceType: true
+        NSCalendarsUsageDescription: MacSpaces shows your events in the Calendar page and widget and counts down to video meetings.
+        NSCalendarsFullAccessUsageDescription: MacSpaces shows your events in the Calendar page and widget and counts down to video meetings.
+        NSRemindersUsageDescription: MacSpaces shows and completes reminders in the Reminders widget.
+        NSRemindersFullAccessUsageDescription: MacSpaces shows and completes reminders in the Reminders widget.
+        NSLocationWhenInUseUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
+        NSLocationUsageDescription: MacSpaces uses your location to show local weather. Coordinates are only sent to the Open-Meteo forecast API.
+        NSBluetoothAlwaysUsageDescription: MacSpaces reads your already-paired Bluetooth devices to show their battery levels in the Battery widget. It does not scan for or track nearby devices.
+        NSAppleEventsUsageDescription: MacSpaces uses AppleScript for meeting controls, quick actions, Music playlist controls, and media metadata from Music, Spotify, or your active browser when system-wide media info is unavailable.
+        NSServices:
+          - NSMenuItem:
+              default: Add to MacSpaces Tray
+            NSMessage: addToTray
+            NSPortName: MacSpaces
+            NSSendTypes: [public.file-url]
+          - NSMenuItem:
+              default: MacSpaces File Tools
+            NSMessage: fileTools
+            NSPortName: MacSpaces
+            NSSendTypes: [public.file-url]
+        NSHumanReadableCopyright: MIT licensed open-source software.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces
+        ARCHS: "arm64 x86_64"
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_ENTITLEMENTS: Sources/Resources/MacSpaces.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
+        GENERATE_INFOPLIST_FILE: false
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # Privileged helper for "Agents keep running" (pmset disablesleep 0/1 over XPC).
+  MacSpacesPowerHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helpers/PowerHelper/main.swift
+      - path: Sources/Services/PowerHelperProtocol.swift
+    settings:
+      base:
+        PRODUCT_NAME: MacSpacesPowerHelper
+        PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces.PowerHelper
+        INFOPLIST_FILE: Helpers/PowerHelper/Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: true
+        GENERATE_INFOPLIST_FILE: false
+        SKIP_INSTALL: true
+        ARCHS: "arm64 x86_64"
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
+        OTHER_CODE_SIGN_FLAGS: "--identifier dev.opensource.MacSpaces.PowerHelper"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+  # Voices from recordings: Siren's speaker sorting and voice models, in their own process so the
+  # notch app never holds MLX or a model (about 4.2 GB at most while speaking with the 1.7B model). Apple silicon, macOS 15 and later.
+  MacSpacesVoiceHelper:
+    type: xpc-service
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Helpers/VoiceHelper
+        excludes:
+          - Info.plist
+      - path: Sources/Services/VoiceHelperProtocol.swift
+      - path: Sources/Core/Voices
+    dependencies:
+      - package: SirenQwen
+        product: SirenQwen
+      - package: SirenCosyVoice
+        product: CosyVoiceTTS
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXAudio
+        product: MLXAudioVAD
+      # DeepFilterNet: Siren's light noise reduction for the clips sorting cuts.
+      - package: MLXAudio
+        product: MLXAudioSTS
+    info:
+      path: Helpers/VoiceHelper/Info.plist
+      properties:
+        CFBundleName: MacSpacesVoiceHelper
+        CFBundleDisplayName: MacSpaces Voices
+        LSMinimumSystemVersion: "15.0"
+        NSSpeechRecognitionUsageDescription: MacSpaces writes down what each person says in recordings you drop in, on this Mac, so a voice made from them speaks clearly.
+        XPCService:
+          ServiceType: Application
+          RunLoopType: NSRunLoop
+    settings:
+      base:
+        PRODUCT_NAME: MacSpacesVoiceHelper
+        PRODUCT_BUNDLE_IDENTIFIER: dev.opensource.MacSpaces.VoiceHelper
+        ARCHS: arm64
+        EXCLUDED_ARCHS: x86_64
+        SWIFT_VERSION: "5.0"
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28LJG7MXT3
+        GENERATE_INFOPLIST_FILE: false
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SKIP_INSTALL: true
+        DEAD_CODE_STRIPPING: true
+      configs:
+        # Strip local symbols in the shipped build: about 26 MB instead of 45 MB.
+        Release:
+          DEPLOYMENT_POSTPROCESSING: true
+          STRIP_INSTALLED_PRODUCT: true
+          STRIP_STYLE: non-global
