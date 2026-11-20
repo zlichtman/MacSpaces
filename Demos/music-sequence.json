@@ -1,0 +1,68 @@
+{
+  "source": "Existing portfolio music.mp4: five original songs in their original order and themes",
+  "segmentSeconds": 5.0,
+  "posterSeconds": 2.5,
+  "songs": [
+    {
+      "key": "generationals",
+      "artist": "Generationals",
+      "title": "Put a Light On",
+      "album": "Heza",
+      "theme": "blossom",
+      "match": "the stars are way too bright",
+      "excerpt": "The stars are way too bright",
+      "lyricAt": 79,
+      "lyricEnd": 83,
+      "trackId": 1651336775
+    },
+    {
+      "key": "phantogram",
+      "artist": "Phantogram",
+      "title": "Mouthful of Diamonds",
+      "album": "Eyelid Movies",
+      "theme": "firefly",
+      "match": "I wish I could believe",
+      "excerpt": "I wish I could believe",
+      "lyricAt": 91,
+      "lyricEnd": 95,
+      "trackId": 718557612
+    },
+    {
+      "key": "suki-waterhouse",
+      "artist": "Suki Waterhouse",
+      "title": "Seasons",
+      "album": "Loveland (Bonus Track Version)",
+      "theme": "autumn",
+      "match": "How sad that the seasons change",
+      "excerpt": "How sad that the seasons change, but the loneliness stays, the loneliness stays",
+      "lyricAt": 104,
+      "lyricEnd": 108,
+      "trackId": 6790629204
+    },
+    {
+      "key": "fog-lake",
+      "artist": "Fog Lake",
+      "title": "Catacombs",
+      "album": "Tragedy Reel",
+      "theme": "bamboo",
+      "match": "you see it too",
+      "excerpt": "You see it too",
+      "lyricAt": 118,
+      "lyricEnd": 122,
+      "trackId": 1760834263
+    },
+    {
+      "key": "modern-english",
+      "artist": "Modern English",
+      "title": "I Melt With You (Rerecorded)",
+      "album": "Pillow Lips",
+      "theme": "glacier",
+      "match": "I'll stop the world",
+      "excerpt": "I'll stop the world and melt with you",
+      "lyricAt": 128,
+      "lyricEnd": 132,
+      "trackId": 1733715026
+    }
+  ],
+  "timingSource": "Playback positions preserved from the existing silent Music video; excerpts are pinned, not replaced by live lyric search."
+}
