@@ -1,0 +1,234 @@
+import AppKit
+import SwiftUI
+
+/// Borderless, non-activating panel that floats above the menu bar and hosts the notch UI.
+final class NotchWindow: NSPanel {
+    /// The Nook model this window shows, so app-wide key monitors act only on
+    /// their own display. Untyped so the window compiles on its own in checks.
+    weak var owner: AnyObject?
+
+    init(contentRect: NSRect) {
+        super.init(contentRect: contentRect,
+                   styleMask: [.borderless, .nonactivatingPanel],
+                   backing: .buffered,
+                   defer: false)
+
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        isMovable = false
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        level = .statusBar
+        animationBehavior = .none
+        // The Nook is anchored screen furniture. Transient panels participate
+        // in Show Desktop's evacuation animation and visibly fly off-screen
+        // when the wallpaper is clicked. Stationary excludes that animation.
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+    }
+
+    /// The AppKit window owns its frame. Keep SwiftUI one level below its
+    /// content view: on macOS 27 an animated widget removal can still make a
+    /// direct NSHostingView resize its window even with sizingOptions empty.
+    func installNookContent(_ host: NSView) {
+        let container = NotchContentContainer(frame: NSRect(origin: .zero, size: frame.size))
+        container.autoresizingMask = [.width, .height]
+        host.frame = container.bounds
+        host.autoresizingMask = [.width, .height]
+        container.addSubview(host)
+        contentView = container
+    }
+
+    // Allow the panel to receive keyboard focus for the shelf without activating the app.
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+/// The panel needs transparent room for the Nook shadow, but that room must
+/// not become an invisible mouse trigger over the app underneath.
+final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    private let interactiveSize: () -> CGSize
+    private let interactiveOffset: () -> CGFloat
+    private let topCameraClearance: () -> CGSize
+    private let fileDragActivationSize: () -> CGSize
+    private let fileDragEntered: () -> Void
+    private let fileDragExited: () -> Void
+    private let fileURLsDropped: ([URL]) -> Bool
+    private var isFileDragTargeted = false
+    private static var widgetType: NSPasteboard.PasteboardType { .init("dev.opensource.MacSpaces.widget") }
+    private let widgetDataDropped: (Data) -> Bool
+
+    required init(rootView: Content) {
+        self.interactiveSize = { .zero }
+        self.interactiveOffset = { 0 }
+        self.topCameraClearance = { .zero }
+        self.fileDragActivationSize = { .zero }
+        self.fileDragEntered = {}
+        self.fileDragExited = {}
+        self.fileURLsDropped = { _ in false }
+        self.widgetDataDropped = { _ in false }
+        super.init(rootView: rootView)
+        configureGeometry()
+        registerForDraggedTypes([.fileURL, Self.widgetType])
+    }
+
+    init(
+        rootView: Content,
+        interactiveSize: @escaping () -> CGSize,
+        interactiveOffset: @escaping () -> CGFloat = { 0 },
+        topCameraClearance: @escaping () -> CGSize = { .zero },
+        fileDragActivationSize: @escaping () -> CGSize,
+        fileDragEntered: @escaping () -> Void,
+        fileDragExited: @escaping () -> Void,
+        fileURLsDropped: @escaping ([URL]) -> Bool,
+        widgetDataDropped: @escaping (Data) -> Bool = { _ in false }
+    ) {
+        self.interactiveSize = interactiveSize
+        self.interactiveOffset = interactiveOffset
+        self.topCameraClearance = topCameraClearance
+        self.fileDragActivationSize = fileDragActivationSize
+        self.fileDragEntered = fileDragEntered
+        self.fileDragExited = fileDragExited
+        self.fileURLsDropped = fileURLsDropped
+        self.widgetDataDropped = widgetDataDropped
+        super.init(rootView: rootView)
+        configureGeometry()
+        registerForDraggedTypes([.fileURL, Self.widgetType])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func configureGeometry() {
+        // NotchManager owns the window frame. Letting SwiftUI also resize the
+        // window from animated ideal sizes creates a layout/constraint loop.
+        sizingOptions = []
+        autoresizingMask = [.width, .height]
+        if #available(macOS 13.3, *) {
+            // Camera clearance is already applied by NotchGeometry.
+            safeAreaRegions = []
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let size = interactiveSize()
+        let interactiveFrame = NSRect(
+            x: bounds.midX + interactiveOffset() - size.width / 2,
+            y: bounds.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        guard interactiveFrame.contains(point), !isInTransparentShoulder(point) else { return nil }
+        return super.hitTest(point)
+    }
+
+    private func isInTransparentShoulder(_ point: NSPoint) -> Bool {
+        let camera = topCameraClearance()
+        return camera.height > 0 && point.y > bounds.maxY - camera.height
+            && abs(point.x - bounds.midX) > camera.width / 2
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.availableType(from: [Self.widgetType]) != nil {
+            return isInsideWidgetDropZone(sender) ? .copy : []
+        }
+        return updateFileDragTarget(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        setFileDragTargeted(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if sender.draggingPasteboard.availableType(from: [Self.widgetType]) != nil {
+            return isInsideWidgetDropZone(sender)
+        }
+        return isFileDragTargeted && isInsideFileDragActivationZone(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let data = sender.draggingPasteboard.data(forType: Self.widgetType) {
+            return isInsideWidgetDropZone(sender) && widgetDataDropped(data)
+        }
+        let urls = Self.fileURLs(from: sender.draggingPasteboard)
+        guard isFileDragTargeted, !urls.isEmpty else { return false }
+        isFileDragTargeted = false
+        return fileURLsDropped(urls)
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        // A successful drop intentionally leaves Tray open so the user can
+        // act on the file they just added. Cancellation is handled by
+        // draggingExited(_:), which restores normal hover-close behavior.
+    }
+
+    private func isInsideWidgetDropZone(_ sender: NSDraggingInfo) -> Bool {
+        let size = interactiveSize()
+        let point = convert(sender.draggingLocation, from: nil)
+        return NSRect(x: bounds.midX + interactiveOffset() - size.width / 2,
+            y: bounds.maxY - size.height, width: size.width, height: size.height).contains(point)
+            && !isInTransparentShoulder(point)
+    }
+
+    private func updateFileDragTarget(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let shouldTarget =
+            Self.containsFileURLs(sender.draggingPasteboard)
+            && isInsideFileDragActivationZone(sender)
+        setFileDragTargeted(shouldTarget)
+        return shouldTarget ? .copy : []
+    }
+
+    private func setFileDragTargeted(_ targeted: Bool) {
+        guard isFileDragTargeted != targeted else { return }
+        isFileDragTargeted = targeted
+        if targeted {
+            fileDragEntered()
+        } else {
+            fileDragExited()
+        }
+    }
+
+    private func isInsideFileDragActivationZone(_ sender: NSDraggingInfo) -> Bool {
+        let size = fileDragActivationSize()
+        let activationFrame = NSRect(
+            x: bounds.midX + interactiveOffset() - size.width / 2,
+            y: bounds.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        let point = convert(sender.draggingLocation, from: nil)
+        return activationFrame.contains(point) && !isInTransparentShoulder(point)
+    }
+
+    private static func containsFileURLs(_ pasteboard: NSPasteboard) -> Bool {
+        pasteboard.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        )
+    }
+
+    private static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        (pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) ?? []).compactMap { object in
+            guard let url = object as? NSURL else { return nil }
+            return url as URL
+        }
+    }
+}
+
+/// The geometry wrapper must not turn the Nook's transparent shoulders or
+/// camera cutout into clickable areas when the hosting view declines a hit.
+private final class NotchContentContainer: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let target = super.hitTest(point)
+        return target === self ? nil : target
+    }
+}

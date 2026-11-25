@@ -1,0 +1,43 @@
+SirenQwen
+
+Qwen3-TTS for Siren, vendored from mlx-audio-swift
+(https://github.com/Blaizzy/mlx-audio-swift), MIT License, commit
+d8e2cafea891928075d3c8577b1a05b99396594e. Copyright (c) 2025 Prince Canuma.
+The full licence is in LICENSE.
+
+The speed-ups are ported from Vocello (https://github.com/PowerBeef/Vocello),
+MIT License, commit d53b30b48b58eab0276a7f0fc9cfa3c632e5f135 (27 Oct 2026).
+Copyright (c) 2026 PowerBeef. The full licence is in LICENSE-Vocello.
+
+Qwen3-TTS itself is by the Qwen team at Alibaba, Apache License 2.0. The
+weights Siren downloads are mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit and
+mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit on Hugging Face.
+
+Taken unchanged from Sources/MLXAudioTTS/Models/Qwen3TTS:
+Qwen3TTSConfig.swift, Qwen3TTSSpeakerEncoder.swift and Qwen3TTSTalker.swift.
+SendingBox.swift is MLXAudioCore's, made internal.
+
+Changes made for Siren:
+- Package.swift is new: one module, SirenQwen, on mlx-audio-swift's
+  MLXAudioCore, MLXAudioCodecs and MLXAudioTTS at the commit above. Siren
+  still uses mlx-audio-swift for everything else, so the files are copied
+  rather than taken from Vocello's fork, whose modules have the same names.
+- Qwen3TTS.swift:
+  - imports MLXAudioTTS, since it's no longer inside that module;
+  - the reference cache holds the array it caches and compares by identity,
+    instead of keeping only its ObjectIdentifier, which a later array could
+    reuse and so get an earlier voice; its two debug prints are gone;
+  - the generation loop runs the code predictor through
+    CodePredictorCompiledPlan, and submits each step with asyncEval, handing
+    the previous audio chunk over while the step computes (both Vocello's).
+  - the speech tokenizer's weights are worked out one at a time on loading,
+    without the file's copies held beside them.
+- Qwen3TTSCodePredictor.swift: fused RoPE (MLXFast.RoPE) in place of the
+  rotate-half chain, and CodePredictorStepConstants (both Vocello's).
+- Qwen3TTSCodePredictorCompiled.swift: Vocello's file, with its comments
+  shortened.
+- Qwen3TTSSpeechTokenizer.swift: streamingStep(_:waits:) can submit its output
+  without waiting for it; the encoder runs SEANet over a long reference in
+  2 s pieces, each with the frames before it as context (the same frames as
+  one pass, in a fraction of the memory); its weights are laid out in row
+  order once on loading, rather than copied by every convolution.
